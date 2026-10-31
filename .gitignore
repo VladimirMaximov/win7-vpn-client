@@ -1,0 +1,44 @@
+# Build artifacts and downloaded dependencies
+.deps/
+artifacts/
+dist/
+**/bin/
+**/obj/
+.cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vs/
+*.user
+*.suo
+*.exe
+*.dll
+*.zip
+*.gz
+*.nupkg
+
+# Local credentials and runtime state — never publish
+.ssh/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+id_*
+*.pub
+known_hosts*
+subscription.dat
+profiles.dat
+recovery.dat
+runtime.json
+pending-profile.json
+*.log
+*.tmp
+work/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

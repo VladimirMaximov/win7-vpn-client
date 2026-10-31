@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+    <ProjectGuid>{563295CF-39F1-47D6-8935-4DC18D073FAD}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>MihomoDesk</RootNamespace>
+    <AssemblyName>VPN</AssemblyName>
+    <StartupObject>MihomoDesk.Bootstrap</StartupObject>
+    <ApplicationIcon>..\..\resources\VPN.ico</ApplicationIcon>
+    <OutputPath>..\..\dist\</OutputPath>
+    <Optimize>true</Optimize>
+    <CodePage>65001</CodePage>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="YamlDotNet"><HintPath>..\..\.deps\YamlDotNet.dll</HintPath><Private>False</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="App.cs" />
+    <Compile Include="Assets.cs" />
+    <Compile Include="Core.cs" />
+    <Compile Include="Diagnostics.cs" />
+    <Compile Include="SelfTest.cs" />
+    <Compile Include="SimpleUI.cs" />
+    <Compile Include="Subscription.cs" />
+    <Compile Include="Telemetry.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\artifacts\bundle\mihomo.exe.gz"><LogicalName>assets.mihomo.exe.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\xray.exe.gz"><LogicalName>assets.xray.exe.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\YamlDotNet.dll.gz"><LogicalName>assets.YamlDotNet.dll.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\LICENSE.txt.gz"><LogicalName>assets.LICENSE.txt.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\LICENSE-mihomo.txt.gz"><LogicalName>assets.LICENSE-mihomo.txt.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\LICENSE-Xray.txt.gz"><LogicalName>assets.LICENSE-Xray.txt.gz</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\..\artifacts\bundle\LICENSE-YamlDotNet.txt.gz"><LogicalName>assets.LICENSE-YamlDotNet.txt.gz</LogicalName></EmbeddedResource>
+  </ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+</Project>
