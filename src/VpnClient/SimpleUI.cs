@@ -331,7 +331,7 @@ namespace MihomoDesk
                 title.Font = new Font("Segoe UI", 15, FontStyle.Bold);
                 title.AutoSize = true;
                 p.Controls.Add(title);
-                Setup(importButton, "Добавить или заменить подписку", 350);
+                Setup(importButton, "Добавить подписку или сервер", 350);
                 Setup(refreshButton, "Обновить серверы", 350);
                 Setup(fileButton, "Импортировать файл настроек", 350);
                 Setup(removeButton, "Удалить подписку", 350);
@@ -372,7 +372,7 @@ namespace MihomoDesk
                 };
                 p.Controls.Add(licenses);
                 Label version = new Label();
-                version.Text = "VPN 0.7 · настройки сохраняются на этом компьютере";
+                version.Text = "VPN 0.8 · настройки сохраняются на этом компьютере";
                 version.Font = new Font("Segoe UI", 8);
                 version.AutoSize = true;
                 version.Margin = new Padding(0, 12, 0, 0);
@@ -409,7 +409,7 @@ namespace MihomoDesk
                 {
                     using (StreamWriter writer = new StreamWriter(d.FileName, false, System.Text.Encoding.UTF8))
                     {
-                        writer.WriteLine("VPN 0.7 · журнал диагностики");
+                        writer.WriteLine("VPN 0.8 · журнал диагностики");
                         for (int i = 2; i >= 0; i--)
                         {
                             string path = Diagnostics.FilePath + (i == 0 ? "" : "." + i);

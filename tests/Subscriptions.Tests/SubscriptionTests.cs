@@ -62,7 +62,6 @@ class Tests
         Check(failed && Object.ReferenceEquals(old, result), "failed replacement leaves working subscription untouched");
         foreach (string bad in new string[]
         {
-            "http://provider.invalid/key",
             "https://user:password@provider.invalid/key",
             "file:///secret"
         }
@@ -99,6 +98,63 @@ class Tests
         foreach (string p in Directory.GetFiles(Diagnostics.Folder))
             log += File.ReadAllText(p);
         Check(!log.Contains("SUBSCRIPTION_SECRET") && !log.Contains("provider.invalid"), "source URL absent from logs");
+        int directFetches = 0;
+        Func<Uri, string, string> noNetwork = delegate (Uri u, string agent)
+        {
+            directFetches++;
+            throw new Exception("Unexpected fetch");
+        };
+        var direct = Subscriptions.ImportInputWith(good, noNetwork);
+        Check(direct.Nodes.Count == 1 && direct.Url == "" && directFetches == 0, "direct server link imports without a network request");
+        var multiple = Subscriptions.ImportInputWith(good + "\n" + good, noNetwork);
+        Check(multiple.Nodes.Count == 2 && directFetches == 0, "multiple server links import locally");
+        var encoded = Subscriptions.ImportInputWith(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(good)), noNetwork);
+        Check(encoded.Nodes.Count == 1 && encoded.Url == "", "base64 input imports without an update URL");
+        Check(direct.UpdatedUtc == DateTime.MinValue, "local input has no automatic refresh source");
+        var https = Subscriptions.ImportInputWith(url, delegate (Uri u, string agent)
+        {
+            return good;
+        });
+        Check(https.Url == url, "HTTPS input keeps its refresh source");
+        var http = Subscriptions.ImportInputWith("http://provider.invalid/sub#label", delegate (Uri u, string agent)
+        {
+            return good;
+        });
+        Check(http.Url == "http://provider.invalid/sub", "HTTP subscription accepted with normalized source");
+        bool downgradeBlocked = false;
+        try
+        {
+            Subscriptions.ValidateRedirect(new Uri("https://provider.invalid/sub"), new Uri("http://provider.invalid/sub"));
+        }
+        catch
+        {
+            downgradeBlocked = true;
+        }
+
+        Check(downgradeBlocked, "HTTPS redirect cannot downgrade to HTTP");
+        Check(Subscriptions.ValidateRedirect(new Uri("http://provider.invalid/sub"), new Uri("https://provider.invalid/sub")).Scheme == "https", "HTTP redirect may upgrade to HTTPS");
+        bool placeholderRejected = false;
+        try
+        {
+            Subscriptions.ImportInputWith(dummy, noNetwork);
+        }
+        catch
+        {
+            placeholderRejected = true;
+        }
+
+        Check(placeholderRejected, "direct placeholder rejected");
+        bool unknownRejected = false;
+        try
+        {
+            Subscriptions.ImportInputWith("unknown://example.invalid/config", noNetwork);
+        }
+        catch
+        {
+            unknownRejected = true;
+        }
+
+        Check(unknownRejected, "unknown link scheme does not trigger a network request");
         Console.WriteLine("TOTAL " + passed);
     }
 }

@@ -68,6 +68,13 @@ namespace MihomoDesk
                 ((System.Windows.Forms.Timer)typeof(MainForm).GetField("timer", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f)).Stop();
             }
 
+            using (ImportDialog input = new ImportDialog())
+            {
+                input.Show();
+                Application.DoEvents();
+                Draw(input, "vpn-import.png");
+            }
+
             File.WriteAllText(Path.Combine(Program.Home, "selftest.txt"), "OK: single executable; embedded dependencies; Windows Forms; main/settings/tray rendered.");
         }
 

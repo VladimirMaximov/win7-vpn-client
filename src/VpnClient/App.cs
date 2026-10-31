@@ -27,7 +27,7 @@ namespace MihomoDesk
                 return;
             }
 
-            Diagnostics.Write("app.start", "version=0.7 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
+            Diagnostics.Write("app.start", "version=0.8 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
             if (args.Length == 1 && args[0] == "--recover")
             {
                 try
@@ -565,7 +565,7 @@ namespace MihomoDesk
                 selection = chosen;
                 Fill();
                 Diagnostics.Write("subscription.saved", "nodes=" + nodes.Count);
-                Say("Подписка сохранена. Серверов: " + nodes.Count + ". Дальше достаточно нажать «Подключить».");
+                Say((subscriptionUrl == "" ? "Настройки серверов сохранены. " : "Подписка сохранена. ") + "Серверов: " + nodes.Count + ". Дальше достаточно нажать «Подключить».");
                 UpdateButtons();
             }
             catch (Exception e)
@@ -911,10 +911,10 @@ namespace MihomoDesk
         public SubscriptionResult Downloaded;
         public ImportDialog()
         {
-            Text = "Добавить или заменить подписку";
-            ClientSize = new Size(630, 215);
-            MinimumSize = new Size(640, 250);
-            MaximumSize = new Size(1000, 300);
+            Text = "Добавить подписку или сервер";
+            ClientSize = new Size(630, 325);
+            MinimumSize = new Size(640, 360);
+            MaximumSize = new Size(1000, 600);
             StartPosition = FormStartPosition.CenterParent;
             Font = new Font("Segoe UI", 10);
             TableLayoutPanel p = new TableLayoutPanel();
@@ -923,14 +923,17 @@ namespace MihomoDesk
             p.RowCount = 4;
             p.ColumnCount = 1;
             p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
             Controls.Add(p);
-            hint.Text = "Вставьте HTTPS-ссылку подписки вашего VPN-сервиса. Приложение сохранит её и будет обновлять серверы.";
+            hint.Text = "Вставьте ссылку подписки, ссылку сервера или список ссылок — по одной на строку.";
             hint.Dock = DockStyle.Fill;
             p.Controls.Add(hint);
-            url.Dock = DockStyle.Top;
+            url.Dock = DockStyle.Fill;
+            url.Multiline = true;
+            url.ScrollBars = ScrollBars.Vertical;
+            url.AcceptsReturn = true;
             p.Controls.Add(url);
             FlowLayoutPanel buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Fill;
@@ -941,7 +944,7 @@ namespace MihomoDesk
             buttons.Controls.AddRange(new Control[] { save, cancel });
             p.Controls.Add(buttons);
             Label privacy = new Label();
-            privacy.Text = "Ссылка хранится зашифрованной на этом компьютере и не попадает в журнал. Рабочие серверы сохранятся, если новая ссылка не загрузится.";
+            privacy.Text = "Настройки хранятся зашифрованно. Подписки обновляются автоматически; отдельные ссылки серверов сохраняются без автообновления.";
             privacy.Dock = DockStyle.Fill;
             privacy.Font = new Font("Segoe UI", 8);
             p.Controls.Add(privacy);
@@ -965,7 +968,12 @@ namespace MihomoDesk
         {
             try
             {
-                Subscriptions.Validate(url.Text);
+                if (Subscriptions.IsSubscriptionLink(url.Text))
+                {
+                    Uri source = Subscriptions.Validate(url.Text);
+                    if (source.Scheme == "http" && MessageBox.Show(this, "Эта подписка загружается без шифрования. Ссылка и настройки могут быть видны участникам сети. Продолжить?", "HTTP-подписка", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                        return;
+                }
             }
             catch (Exception e)
             {
@@ -976,11 +984,11 @@ namespace MihomoDesk
             string input = url.Text;
             loading = true;
             save.Enabled = cancel.Enabled = url.Enabled = false;
-            hint.Text = "Загрузка и проверка серверов…";
+            hint.Text = "Проверка и сохранение настроек…";
             BackgroundWorker worker = new BackgroundWorker();
             worker.DoWork += delegate (object sender, DoWorkEventArgs e)
             {
-                e.Result = Subscriptions.Download(input);
+                e.Result = Subscriptions.ImportInput(input);
             };
             worker.RunWorkerCompleted += delegate (object sender, RunWorkerCompletedEventArgs e)
             {

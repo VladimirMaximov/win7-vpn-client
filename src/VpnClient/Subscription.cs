@@ -19,11 +19,52 @@ namespace MihomoDesk
         public static Uri Validate(string text)
         {
             Uri uri;
-            if (!Uri.TryCreate(text.Trim(), UriKind.Absolute, out uri) || uri.Scheme != "https" || uri.UserInfo != "")
-                throw new InvalidDataException("Нужна HTTPS-ссылка подписки без логина и пароля в адресе.");
+            if (!Uri.TryCreate(text.Trim(), UriKind.Absolute, out uri) || (uri.Scheme != "https" && uri.Scheme != "http") || uri.UserInfo != "")
+                throw new InvalidDataException("Нужна HTTP- или HTTPS-ссылка подписки без логина и пароля в адресе.");
             UriBuilder clean = new UriBuilder(uri);
             clean.Fragment = "";
             return clean.Uri;
+        }
+
+        public static bool IsSubscriptionLink(string text)
+        {
+            string input = text.Trim();
+            return input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && (input.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || input.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static SubscriptionResult ImportInput(string text)
+        {
+            return ImportInputWith(text, Fetch);
+        }
+
+        public static SubscriptionResult ImportInputWith(string text, Func<Uri, string, string> fetch)
+        {
+            string input = text.Trim();
+            Diagnostics.Input(input);
+            if (IsSubscriptionLink(input))
+                return DownloadWith(input, fetch);
+            List<Dictionary<string, object>> nodes = Profiles.Import(input);
+            nodes.RemoveAll(delegate (Dictionary<string, object> node)
+            {
+                return !Profiles.Usable(node);
+            });
+            if (nodes.Count == 0)
+                throw new InvalidDataException("В настройках нет рабочих серверов.");
+            Diagnostics.Nodes(nodes, "direct-import");
+            return new SubscriptionResult
+            {
+                Url = "",
+                Nodes = nodes,
+                UpdatedUtc = DateTime.MinValue
+            };
+        }
+
+        public static Uri ValidateRedirect(Uri source, Uri target)
+        {
+            Uri next = Validate(target.AbsoluteUri);
+            if (source.Scheme == "https" && next.Scheme != "https")
+                throw new InvalidDataException("Сервер перенаправил защищённую ссылку на HTTP. Такое перенаправление не выполняется.");
+            return next;
         }
 
         public static SubscriptionResult Download(string url)
@@ -77,9 +118,10 @@ namespace MihomoDesk
 
         public static string Fetch(Uri uri, string agent)
         {
-            ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
             for (int redirects = 0; redirects <= 3; redirects++)
             {
+                if (uri.Scheme == "https")
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
                 HttpWebRequest r = (HttpWebRequest)WebRequest.Create(uri);
                 r.AllowAutoRedirect = false;
                 r.Timeout = 15000;
@@ -87,7 +129,7 @@ namespace MihomoDesk
                 r.UserAgent = agent;
                 r.Proxy = null;
                 r.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-                Diagnostics.Write("subscription.request", "scheme=https userAgent=" + agent + " redirectStep=" + redirects);
+                Diagnostics.Write("subscription.request", "scheme=" + uri.Scheme + " userAgent=" + agent + " redirectStep=" + redirects);
                 using (HttpWebResponse response = (HttpWebResponse)r.GetResponse())
                 {
                     int code = (int)response.StatusCode;
@@ -98,7 +140,7 @@ namespace MihomoDesk
                         string location = response.Headers["Location"];
                         if (redirects == 3 || String.IsNullOrEmpty(location) || !Uri.TryCreate(uri, location, out target))
                             throw new InvalidDataException("Слишком много или неверное перенаправление подписки.");
-                        uri = Validate(target.AbsoluteUri);
+                        uri = ValidateRedirect(uri, target);
                         continue;
                     }
 
