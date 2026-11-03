@@ -77,6 +77,7 @@ namespace MihomoDesk
             Uri uri = Validate(url);
             string[] agents =
             {
+                "Win7VpnClient/0.9",
                 "clash.meta/1.19.33",
                 "v2rayN/7.15.7",
                 "Hiddify/2.5.7",
@@ -118,7 +119,9 @@ namespace MihomoDesk
 
         public static string Fetch(Uri uri, string agent)
         {
-            for (int redirects = 0; redirects <= 3; redirects++)
+            int redirects = 0;
+            bool sendDeviceIdentity = false;
+            for (int attempt = 0; attempt < 8; attempt++)
             {
                 if (uri.Scheme == "https")
                     ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
@@ -128,6 +131,8 @@ namespace MihomoDesk
                 r.ReadWriteTimeout = 15000;
                 r.UserAgent = agent;
                 r.Proxy = null;
+                if (sendDeviceIdentity)
+                    DeviceIdentity.Apply(r);
                 r.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
                 Diagnostics.Write("subscription.request", "scheme=" + uri.Scheme + " userAgent=" + agent + " redirectStep=" + redirects);
                 using (HttpWebResponse response = (HttpWebResponse)r.GetResponse())
@@ -141,7 +146,22 @@ namespace MihomoDesk
                         if (redirects == 3 || String.IsNullOrEmpty(location) || !Uri.TryCreate(uri, location, out target))
                             throw new InvalidDataException("Слишком много или неверное перенаправление подписки.");
                         uri = ValidateRedirect(uri, target);
+                        redirects++;
+                        sendDeviceIdentity = false;
                         continue;
+                    }
+
+                    if (!sendDeviceIdentity && DeviceIdentity.Required(response.Headers))
+                    {
+                        Diagnostics.Write("subscription.device-required", "registration=own-installation");
+                        sendDeviceIdentity = true;
+                        continue;
+                    }
+
+                    if (sendDeviceIdentity && String.Equals(response.Headers["X-Hwid-Limit"], "true", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Diagnostics.Write("subscription.device-rejected", "reason=device-limit");
+                        throw new InvalidDataException("Проверьте доступные устройства в личном кабинете VPN-сервиса. Новые идентификаторы автоматически не создаются.");
                     }
 
                     if (code != 200)

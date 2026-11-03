@@ -30,6 +30,7 @@ id_*
 *.pub
 known_hosts*
 subscription.dat
+device-id.txt
 profiles.dat
 recovery.dat
 runtime.json

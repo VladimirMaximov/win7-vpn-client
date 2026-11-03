@@ -155,6 +155,34 @@ class Tests
         }
 
         Check(unknownRejected, "unknown link scheme does not trigger a network request");
+        DeviceIdentity.Folder = Path.GetFullPath("artifacts/device-identity-tests");
+        Directory.CreateDirectory(DeviceIdentity.Folder);
+        string idPath = Path.Combine(DeviceIdentity.Folder, "device-id.txt");
+        if (File.Exists(idPath))
+            File.Delete(idPath);
+        string ownId = DeviceIdentity.GetId();
+        Check(new Guid(ownId) != Guid.Empty && DeviceIdentity.GetId() == ownId, "installation identity remains stable");
+        var required = new System.Net.WebHeaderCollection();
+        required["X-Hwid-Active"] = "true";
+        required["X-Hwid-Not-Supported"] = "true";
+        Check(DeviceIdentity.Required(required), "provider device requirement recognized");
+        Check(!DeviceIdentity.Required(new System.Net.WebHeaderCollection()), "device identity not sent without provider requirement");
+        var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create("https://provider.invalid/");
+        DeviceIdentity.Apply(request);
+        Check(request.Headers["X-HWID"] == ownId && request.Headers["X-Device-OS"] == "Windows", "own identity and platform attached without hardware fingerprinting");
+        File.WriteAllText(idPath, "corrupted");
+        bool corruptRejected = false;
+        try
+        {
+            DeviceIdentity.GetId();
+        }
+        catch
+        {
+            corruptRejected = true;
+        }
+
+        Check(corruptRejected && File.ReadAllText(idPath) == "corrupted", "corrupt identity not silently replaced with a new device");
+        Check(!File.ReadAllText(Diagnostics.FilePath).Contains(ownId), "device identity absent from diagnostic log");
         Console.WriteLine("TOTAL " + passed);
     }
 }

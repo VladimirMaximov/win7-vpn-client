@@ -8,6 +8,7 @@
     <Compile Include="../../src/VpnClient/Core.cs" Link="Core.cs" />
     <Compile Include="../../src/VpnClient/Diagnostics.cs" Link="Diagnostics.cs" />
     <Compile Include="../../src/VpnClient/Subscription.cs" Link="Subscription.cs" />
+    <Compile Include="../../src/VpnClient/DeviceIdentity.cs" Link="DeviceIdentity.cs" />
     <Compile Include="SubscriptionTests.cs" />
     <Reference Include="YamlDotNet">
       <HintPath>../../.deps/YamlDotNet.dll</HintPath>

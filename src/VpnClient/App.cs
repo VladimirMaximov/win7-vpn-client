@@ -27,7 +27,7 @@ namespace MihomoDesk
                 return;
             }
 
-            Diagnostics.Write("app.start", "version=0.8 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
+            Diagnostics.Write("app.start", "version=0.9 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
             if (args.Length == 1 && args[0] == "--recover")
             {
                 try

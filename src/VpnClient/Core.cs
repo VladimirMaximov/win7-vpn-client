@@ -211,7 +211,7 @@ namespace MihomoDesk
                 throw new Exception("Эта ссылка содержит расширение FinalMask/encryption. Импортируйте совместимый профиль Mihomo от провайдера.");
             if (Q(q, "allowInsecure", "0") == "1" || Q(q, "insecure", "0") == "1" || Q(q, "insecure", "") == "true")
                 throw new Exception("Ссылка отключает проверку TLS. Нужен профиль с корректным сертификатом.");
-            string allowed = scheme == "trojan" ? "|sni|peer|security|type|fp|alpn|allowinsecure|insecure|" : scheme == "ss" ? "|" : scheme == "vless" ? "|security|type|flow|sni|servername|fp|alpn|pbk|sid|path|host|servicename|packetencoding|encryption|allowinsecure|insecure|headertype|" : "|sni|obfs|obfs-password|pinsha256|insecure|allowinsecure|";
+            string allowed = scheme == "trojan" ? "|sni|peer|security|type|fp|alpn|allowinsecure|insecure|" : scheme == "ss" ? "|" : scheme == "vless" ? "|security|type|flow|sni|servername|fp|alpn|pbk|sid|path|host|servicename|packetencoding|encryption|allowinsecure|insecure|headertype|mode|pcs|" : "|sni|obfs|obfs-password|pinsha256|insecure|allowinsecure|fm|";
             foreach (string key in q.Keys)
                 if (allowed.IndexOf("|" + key.ToLowerInvariant() + "|", StringComparison.Ordinal) < 0)
                     throw new Exception("Параметр ссылки «" + key + "» пока не поддерживается. Нужен профиль Mihomo с этим параметром.");
@@ -243,8 +243,8 @@ namespace MihomoDesk
                 string security = Q(q, "security", "none"), net = Q(q, "type", "tcp");
                 if (security != "none" && security != "tls" && security != "reality")
                     throw new Exception("Неизвестная защита VLESS: " + security);
-                if (net != "tcp" && net != "ws" && net != "grpc")
-                    throw new Exception("Импорт ссылок поддерживает TCP, WS и gRPC. Для другого транспорта нужен профиль Mihomo.");
+                if (net != "tcp" && net != "ws" && net != "grpc" && net != "xhttp")
+                    throw new Exception("Этот транспорт пока не поддерживается импортом ссылок.");
                 d["type"] = "vless";
                 d["uuid"] = auth;
                 d["tls"] = security != "none";
@@ -287,6 +287,29 @@ namespace MihomoDesk
                 string packet = Q(q, "packetEncoding", "");
                 if (packet != "")
                     d["packet-encoding"] = packet;
+                if (net == "xhttp" || q.ContainsKey("pcs") || q.ContainsKey("mode"))
+                {
+                    Dictionary<string, object> stream = Map("network", net, "security", security);
+                    if (security == "tls")
+                    {
+                        Dictionary<string, object> tls = Map("serverName", sni, "fingerprint", fp == "" ? "chrome" : fp);
+                        if (alpn != "")
+                            tls["alpn"] = alpn.Split(',');
+                        if (Q(q, "pcs", "") != "")
+                            tls["pinnedPeerCertSha256"] = Q(q, "pcs", "");
+                        stream["tlsSettings"] = tls;
+                    }
+
+                    if (security == "reality")
+                        stream["realitySettings"] = Map("serverName", sni, "fingerprint", fp == "" ? "chrome" : fp, "publicKey", Q(q, "pbk", ""), "shortId", Q(q, "sid", ""));
+                    if (net == "xhttp")
+                        stream["xhttpSettings"] = Map("path", Q(q, "path", "/"), "host", Q(q, "host", ""), "mode", Q(q, "mode", "auto"));
+                    if (net == "grpc")
+                        stream["grpcSettings"] = Map("serviceName", Q(q, "serviceName", ""), "multiMode", Q(q, "mode", "gun") == "multi");
+                    if (net == "ws")
+                        stream["wsSettings"] = Map("path", Q(q, "path", "/"), "headers", Map("Host", Q(q, "host", "")));
+                    d["xray-outbound"] = Map("protocol", "vless", "settings", Map("vnext", new object[] { Map("address", d["server"], "port", d["port"], "users", new object[] { Map("id", auth, "encryption", "none", "flow", flow) }) }), "streamSettings", stream);
+                }
             }
             else if (scheme == "trojan")
             {
@@ -332,6 +355,22 @@ namespace MihomoDesk
                 string pin = Q(q, "pinSHA256", "");
                 if (pin != "")
                     d["fingerprint"] = pin;
+                if (q.ContainsKey("fm"))
+                {
+                    string encoded = Q(q, "fm", "");
+                    if (encoded.Length > 16384)
+                        throw new Exception("Слишком большой параметр расширения.");
+                    Dictionary<string, object> mask = Parse(encoded.TrimStart().StartsWith("{") ? encoded : Decode64(encoded)) as Dictionary<string, object>;
+                    if (mask == null)
+                        throw new Exception("Неверный формат расширения.");
+                    Dictionary<string, object> tls = Map("serverName", sni == "" ? host.Host : sni, "alpn", new string[] { "h3" });
+                    if (pin != "")
+                        tls["pinnedPeerCertSha256"] = pin;
+                    Dictionary<string, object> stream = Map("network", "hysteria", "security", "tls", "tlsSettings", tls, "hysteriaSettings", Map("auth", auth, "version", 2), "finalmask", mask);
+                    if (obfs != "")
+                        throw new Exception("Совместное использование этих расширений пока не поддерживается.");
+                    d["xray-outbound"] = Map("protocol", "hysteria", "settings", Map("address", d["server"], "port", d["port"], "version", 2), "streamSettings", stream);
+                }
             }
             else
                 throw new Exception("Прямой импорт ссылки: VLESS и Hysteria 2. Для остальных протоколов используйте YAML/JSON Mihomo.");
@@ -483,7 +522,7 @@ namespace MihomoDesk
 
         public static bool CanXray(Dictionary<string, object> n)
         {
-            return Get(n, "type", "") == "vless" && Get(n, "network", "tcp") == "tcp" && n.ContainsKey("reality-opts");
+            return n.ContainsKey("xray-outbound") || (Get(n, "type", "") == "vless" && Get(n, "network", "tcp") == "tcp" && n.ContainsKey("reality-opts"));
         }
 
         public static Dictionary<string, object> XrayConfig(List<Dictionary<string, object>> nodes, int selected, int port)
@@ -491,6 +530,13 @@ namespace MihomoDesk
             Dictionary<string, object> n = nodes[selected];
             if (!Usable(n) || !CanXray(n))
                 throw new Exception("Профиль не поддерживается адаптером Xray.");
+            if (n.ContainsKey("xray-outbound"))
+            {
+                Dictionary<string, object> raw = new Dictionary<string, object>((Dictionary<string, object>)n["xray-outbound"]);
+                raw["tag"] = "proxy";
+                return Map("log", Map("loglevel", "warning"), "inbounds", new object[] { Map("listen", "127.0.0.1", "port", port, "protocol", "http", "settings", Map()) }, "outbounds", new object[] { raw });
+            }
+
             Dictionary<string, object> reality = (Dictionary<string, object>)n["reality-opts"];
             Dictionary<string, object> user = Map("id", Get(n, "uuid", ""), "encryption", "none", "flow", Get(n, "flow", ""));
             Dictionary<string, object> outbound = Map("tag", "proxy", "protocol", "vless", "settings", Map("vnext", new object[] { Map("address", Get(n, "server", ""), "port", n["port"], "users", new object[] { user }) }), "streamSettings", Map("network", "tcp", "security", "reality", "tcpSettings", Map(), "realitySettings", Map("serverName", Get(n, "servername", ""), "fingerprint", Get(n, "client-fingerprint", "chrome"), "publicKey", Get(reality, "public-key", ""), "shortId", Get(reality, "short-id", ""))));

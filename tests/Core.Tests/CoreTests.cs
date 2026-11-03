@@ -65,7 +65,7 @@ class Tests
         Reject(reality.Replace("&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ""), "missing REALITY public key rejected");
         Reject(reality + "\nunknown://key@example.com:443", "unsupported line rejects whole import");
         Reject(reality.Replace("security=reality", "security=reality&insecure=1"), "insecure certificate setting rejected");
-        Reject(reality.Replace("type=tcp", "type=xhttp"), "unsupported URI transport reported");
+        Reject(reality.Replace("type=tcp", "type=unknown"), "unsupported URI transport reported");
         Reject(reality.Replace("type=tcp", "type=tcp&finalmask=abc"), "FinalMask not silently ignored");
         Reject(reality.Replace("type=tcp", "type=tcp&type=ws"), "duplicate query keys rejected");
         Reject(yaml + "proxy-providers: {}\n", "external provider dependency rejected");
@@ -101,6 +101,20 @@ class Tests
         var vm = Profiles.Import("vmess://" + Convert.ToBase64String(Encoding.UTF8.GetBytes(vmess)));
         File.WriteAllText("artifacts/test-fixtures/vmess-link.json", Profiles.Json(Profiles.Config(vm, 0, 17890)));
         Check((string)vm[0]["type"] == "vmess", "VMess WebSocket TLS link import");
+        string fm = Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"quicParams\":{\"keepAlivePeriod\":10}}"));
+        var masked = Profiles.Import(hy.Replace("&obfs=salamander&obfs-password=fake", "&fm=" + Uri.EscapeDataString(fm)));
+        Check(Profiles.CanXray(masked[0]), "Hysteria extension selects a capable engine");
+        var maskedConfig = Profiles.XrayConfig(masked, 0, 17890);
+        var maskedOutbound = (Dictionary<string, object>)((object[])maskedConfig["outbounds"])[0];
+        Check(((Dictionary<string, object>)maskedOutbound["streamSettings"]).ContainsKey("finalmask"), "QUIC extension preserved in outbound configuration");
+        string pin = new string ('a', 64);
+        var extended = Profiles.Import("vless://" + uuid + "@127.0.0.1:443?type=xhttp&security=tls&sni=example.com&path=%2Fx&host=example.com&mode=auto&pcs=" + pin + "#Extended");
+        Check(Profiles.CanXray(extended[0]), "XHTTP selects a capable engine");
+        var xc = Profiles.XrayConfig(extended, 0, 17890);
+        var xo = (Dictionary<string, object>)((object[])xc["outbounds"])[0];
+        var xs = (Dictionary<string, object>)xo["streamSettings"];
+        Check((string)((Dictionary<string, object>)xs["tlsSettings"])["pinnedPeerCertSha256"] == pin, "certificate pin preserved");
+        Check((string)((Dictionary<string, object>)xs["xhttpSettings"])["mode"] == "auto", "XHTTP mode preserved");
         Console.WriteLine("TOTAL " + count);
     }
 }

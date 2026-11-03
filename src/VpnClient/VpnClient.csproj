@@ -27,6 +27,7 @@
     <Compile Include="App.cs" />
     <Compile Include="Assets.cs" />
     <Compile Include="Core.cs" />
+    <Compile Include="DeviceIdentity.cs" />
     <Compile Include="Diagnostics.cs" />
     <Compile Include="SelfTest.cs" />
     <Compile Include="SimpleUI.cs" />
