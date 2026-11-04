@@ -26,6 +26,12 @@
   <ItemGroup>
     <Compile Include="App.cs" />
     <Compile Include="Assets.cs" />
+    <Compile Include="SubscriptionCatalog.cs" />
+    <Compile Include="CatalogRepository.cs" />
+    <Compile Include="CatalogUI.cs" />
+    <Compile Include="StyledControls.cs" />
+    <Compile Include="ServerPresentation.cs" />
+    <Compile Include="ProbeRunner.cs" />
     <Compile Include="Core.cs" />
     <Compile Include="DeviceIdentity.cs" />
     <Compile Include="Diagnostics.cs" />

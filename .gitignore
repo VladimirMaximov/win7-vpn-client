@@ -30,6 +30,8 @@ id_*
 *.pub
 known_hosts*
 subscription.dat
+subscriptions.dat
+probes/
 device-id.txt
 profiles.dat
 recovery.dat

@@ -14,5 +14,5 @@ if __name__ == '__main__':
     if not args.dotnet:
         parser.error('Install .NET SDK 8 or pass --dotnet /path/to/dotnet')
     subprocess.run([sys.executable, str(ROOT / 'scripts/prepare-deps.py')], check=True)
-    for name in ['Core.Tests', 'Subscriptions.Tests', 'Diagnostics.Tests']:
+    for name in ['Core.Tests', 'Subscriptions.Tests', 'Diagnostics.Tests', 'Catalog.Tests']:
         subprocess.run([args.dotnet, 'run', '--project', str(ROOT / 'tests' / name / (name + '.csproj'))], cwd=ROOT, check=True)

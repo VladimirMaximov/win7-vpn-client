@@ -43,6 +43,16 @@ namespace MihomoDesk
             Application.SetCompatibleTextRenderingDefault(false);
             using (MainForm f = new MainForm())
             {
+                SubscriptionCatalog preview = new SubscriptionCatalog();
+                var demo = Profiles.Import("vless://11111111-1111-4111-8111-111111111111@127.0.0.1:443?security=reality&type=tcp&flow=xtls-rprx-vision&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sni=example.com#%F0%9F%87%A9%F0%9F%87%AA%20Frankfurt\n" + "vless://11111111-1111-4111-8111-111111111111@127.0.0.2:443?security=reality&type=tcp&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sni=example.com#%F0%9F%87%B3%F0%9F%87%B1%20Amsterdam");
+                var first = preview.Add(new SubscriptionResult { Url = "https://provider.invalid/home", Nodes = demo, UpdatedUtc = DateTime.UtcNow }, "Семейная подписка");
+                preview.Add(new SubscriptionResult { Url = "https://provider.invalid/backup", Nodes = Profiles.Import("hysteria2://fake@127.0.0.3:443?sni=example.com#%F0%9F%87%AB%F0%9F%87%B7%20Paris"), UpdatedUtc = DateTime.UtcNow }, "Резервное подключение");
+                preview.ActiveId = first.Id;
+                typeof(MainForm).GetField("book", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(f, preview);
+                typeof(MainForm).GetField("catalogReadOnly", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(f, false);
+                typeof(MainForm).GetMethod("ApplyActive", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(f, null);
+                typeof(MainForm).GetMethod("RenderCards", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(f, null);
+                ((Label)typeof(MainForm).GetField("notice", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f)).Text = "Предпросмотр · примеры подписок";
                 f.Show();
                 Application.DoEvents();
                 Draw(f, "vpn-main.png");

@@ -423,7 +423,7 @@ namespace MihomoDesk
                 throw new Exception("Вставьте ссылку или профиль.");
             if (text.Length > 4 * 1024 * 1024)
                 throw new Exception("Профиль больше 4 МБ.");
-            if (text.IndexOf("://") < 0 && !text.StartsWith("{") && !text.Contains("proxies:"))
+            if (text.IndexOf("://") < 0 && !text.StartsWith("{") && !text.StartsWith("[") && !text.Contains("proxies:"))
             {
                 try
                 {
@@ -435,23 +435,17 @@ namespace MihomoDesk
             }
 
             List<Dictionary<string, object>> nodes = new List<Dictionary<string, object>>();
-            if (text.StartsWith("{") || text.StartsWith("proxies:") || text.Contains("\nproxies:"))
+            if (text.StartsWith("{") || text.StartsWith("[") || text.StartsWith("proxies:") || text.Contains("\nproxies:"))
             {
-                Dictionary<string, object> root = Parse(text) as Dictionary<string, object>;
-                if (root == null || !root.ContainsKey("proxies"))
-                    throw new Exception("Это не профиль Mihomo. JSON Xray/sing-box напрямую не поддерживается; экспортируйте ссылки VLESS/Hysteria 2.");
-                if (root.ContainsKey("proxy-providers"))
-                    throw new Exception("Профили с внешними proxy-providers пока не поддерживаются. Импортируйте список серверов.");
-                IList items = root["proxies"] as IList;
-                if (items == null)
-                    throw new Exception("Поле proxies должно быть списком.");
-                foreach (object x in items)
+                object parsed = Parse(text);
+                IList array = parsed as IList;
+                if (array != null)
                 {
-                    Dictionary<string, object> d = x as Dictionary<string, object>;
-                    if (d == null)
-                        throw new Exception("Неверное описание сервера.");
-                    nodes.Add(d);
+                    foreach (object item in array)
+                        ImportObject(item as Dictionary<string, object>, nodes);
                 }
+                else
+                    ImportObject(parsed as Dictionary<string, object>, nodes);
             }
             else
             {
@@ -499,6 +493,107 @@ namespace MihomoDesk
             }
 
             return nodes;
+        }
+
+        static Dictionary<string, object> ObjectMap(object value)
+        {
+            return value as Dictionary<string, object>;
+        }
+
+        static Dictionary<string, object> FirstObject(object value)
+        {
+            IList list = value as IList;
+            if (list == null || list.Count != 1)
+                throw new InvalidDataException("Этот JSON содержит сложную цепочку серверов. Нужен отдельный профиль сервера.");
+            Dictionary<string, object> d = ObjectMap(list[0]);
+            if (d == null)
+                throw new InvalidDataException("Неверное описание сервера.");
+            return d;
+        }
+
+        static void ImportObject(Dictionary<string, object> root, List<Dictionary<string, object>> nodes)
+        {
+            if (root == null)
+                throw new InvalidDataException("Неверный формат настроек.");
+            if (root.ContainsKey("proxies"))
+            {
+                if (root.ContainsKey("proxy-providers"))
+                    throw new InvalidDataException("Внешние списки серверов в этом формате пока не поддерживаются.");
+                IList list = root["proxies"] as IList;
+                if (list == null)
+                    throw new InvalidDataException("Неверное описание серверов.");
+                foreach (object item in list)
+                {
+                    Dictionary<string, object> d = ObjectMap(item);
+                    if (d == null)
+                        throw new InvalidDataException("Неверное описание сервера.");
+                    nodes.Add(d);
+                }
+
+                return;
+            }
+
+            IList outbounds = root.ContainsKey("outbounds") ? root["outbounds"] as IList : null;
+            if (outbounds == null)
+                throw new InvalidDataException("JSON не содержит поддерживаемых настроек серверов.");
+            foreach (object item in outbounds)
+            {
+                Dictionary<string, object> outbound = ObjectMap(item);
+                if (outbound == null)
+                    continue;
+                string protocol = Get(outbound, "protocol", "");
+                if (protocol != "vless" && protocol != "vmess" && protocol != "trojan" && protocol != "shadowsocks" && protocol != "hysteria")
+                    continue;
+                if (outbound.ContainsKey("proxySettings"))
+                    throw new InvalidDataException("Цепочки подключений из JSON пока не поддерживаются.");
+                Dictionary<string, object> settings = outbound.ContainsKey("settings") ? ObjectMap(outbound["settings"]) : null;
+                if (settings == null)
+                    throw new InvalidDataException("В JSON отсутствуют реквизиты сервера.");
+                Dictionary<string, object> stream = outbound.ContainsKey("streamSettings") ? ObjectMap(outbound["streamSettings"]) : Map();
+                if (stream == null)
+                    stream = Map();
+                if (stream.ContainsKey("sockopt"))
+                {
+                    Dictionary<string, object> sock = ObjectMap(stream["sockopt"]);
+                    if (sock != null && sock.ContainsKey("dialerProxy"))
+                        throw new InvalidDataException("Цепочки подключений из JSON пока не поддерживаются.");
+                }
+
+                Dictionary<string, object> endpoint, user = null;
+                string type = protocol == "shadowsocks" ? "ss" : protocol == "hysteria" ? "hysteria2" : protocol;
+                if (protocol == "vless" || protocol == "vmess")
+                {
+                    endpoint = FirstObject(settings["vnext"]);
+                    user = FirstObject(endpoint["users"]);
+                }
+                else if (protocol == "hysteria")
+                {
+                    if (Get(settings, "version", "2") != "2")
+                        throw new InvalidDataException("Версия этого протокола пока не поддерживается.");
+                    endpoint = settings;
+                }
+                else
+                    endpoint = FirstObject(settings["servers"]);
+                Dictionary<string, object> node = Map("name", Get(root, "remarks", Get(outbound, "tag", "Сервер")), "type", type, "server", Get(endpoint, "address", ""), "port", endpoint["port"], "network", Get(stream, "network", "tcp"), "tls", Get(stream, "security", "none") != "none", "xray-outbound", outbound);
+                if (user != null)
+                {
+                    node["uuid"] = Get(user, "id", "");
+                    node["flow"] = Get(user, "flow", "");
+                }
+                else if (endpoint.ContainsKey("password"))
+                    node["password"] = endpoint["password"];
+                if (stream.ContainsKey("realitySettings"))
+                {
+                    Dictionary<string, object> reality = ObjectMap(stream["realitySettings"]);
+                    if (reality != null)
+                        node["reality-opts"] = Map("public-key", Get(reality, "publicKey", ""), "short-id", Get(reality, "shortId", ""));
+                }
+
+                nodes.Add(node);
+            }
+
+            if (nodes.Count == 0)
+                throw new InvalidDataException("JSON прочитан, но поддерживаемые серверы не найдены.");
         }
 
         public static bool Usable(Dictionary<string, object> n)

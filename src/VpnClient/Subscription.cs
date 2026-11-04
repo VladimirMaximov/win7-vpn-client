@@ -10,6 +10,7 @@ namespace MihomoDesk
     public sealed class SubscriptionResult
     {
         public string Url;
+        public string Name;
         public List<Dictionary<string, object>> Nodes;
         public DateTime UpdatedUtc;
     }
@@ -77,7 +78,7 @@ namespace MihomoDesk
             Uri uri = Validate(url);
             string[] agents =
             {
-                "Win7VpnClient/0.9",
+                "Win7VpnClient/0.10.0",
                 "clash.meta/1.19.33",
                 "v2rayN/7.15.7",
                 "Hiddify/2.5.7",
@@ -187,9 +188,57 @@ namespace MihomoDesk
             throw new InvalidDataException("Не удалось загрузить подписку.");
         }
 
-        public static string NodeKey(Dictionary<string, object> n)
+        public static string LegacyNodeKey(Dictionary<string, object> n)
         {
             string s = Profiles.Get(n, "type", "") + "|" + Profiles.Get(n, "server", "") + "|" + Profiles.Get(n, "port", "") + "|" + Profiles.Get(n, "uuid", "");
+            using (SHA256 hash = SHA256.Create())
+                return Convert.ToBase64String(hash.ComputeHash(Encoding.UTF8.GetBytes(s)));
+        }
+
+        public static string NodeKey(Dictionary<string, object> n)
+        {
+            string s = LegacyNodeKey(n) + "|" + Profiles.Get(n, "network", "tcp") + "|" + Profiles.Get(n, "flow", "") + "|" + Profiles.Get(n, "tls", "false").ToLowerInvariant() + "|" + n.ContainsKey("reality-opts");
+            foreach (string field in new string[]
+            {
+                "password",
+                "private-key",
+                "token",
+                "username"
+            }
+
+            )
+                s += "|" + Profiles.Get(n, field, "");
+            object raw;
+            if (n.TryGetValue("ws-opts", out raw) && raw is Dictionary<string, object>)
+                s += "|" + Profiles.Get((Dictionary<string, object>)raw, "path", "");
+            if (n.TryGetValue("grpc-opts", out raw) && raw is Dictionary<string, object>)
+                s += "|" + Profiles.Get((Dictionary<string, object>)raw, "grpc-service-name", "");
+            if (n.TryGetValue("xray-outbound", out raw) && raw is Dictionary<string, object>)
+            {
+                Dictionary<string, object> o = (Dictionary<string, object>)raw;
+                object stream;
+                if (o.TryGetValue("streamSettings", out stream) && stream is Dictionary<string, object>)
+                {
+                    Dictionary<string, object> settings = (Dictionary<string, object>)stream;
+                    foreach (string field in new string[]
+                    {
+                        "xhttpSettings",
+                        "grpcSettings",
+                        "wsSettings"
+                    }
+
+                    )
+                    {
+                        object option;
+                        if (settings.TryGetValue(field, out option) && option is Dictionary<string, object>)
+                        {
+                            Dictionary<string, object> d = (Dictionary<string, object>)option;
+                            s += "|" + Profiles.Get(d, "path", "") + "|" + Profiles.Get(d, "serviceName", "") + "|" + Profiles.Get(d, "mode", "");
+                        }
+                    }
+                }
+            }
+
             using (SHA256 hash = SHA256.Create())
                 return Convert.ToBase64String(hash.ComputeHash(Encoding.UTF8.GetBytes(s)));
         }
@@ -198,6 +247,9 @@ namespace MihomoDesk
         {
             for (int i = 0; i < nodes.Count; i++)
                 if (NodeKey(nodes[i]) == key)
+                    return i;
+            for (int i = 0; i < nodes.Count; i++)
+                if (LegacyNodeKey(nodes[i]) == key)
                     return i;
             return nodes.Count > 0 ? 0 : -1;
         }

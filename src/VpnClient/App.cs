@@ -21,13 +21,56 @@ namespace MihomoDesk
         public static void Run(string[] args)
         {
             Directory.CreateDirectory(Home);
+            if (args.Length == 1 && args[0] == "--migration-check")
+            {
+                try
+                {
+                    SubscriptionCatalog migrated = CatalogRepository.Load();
+                    File.WriteAllText(Path.Combine(Home, "migration-result.txt"), "OK subscriptions=" + migrated.Entries.Count);
+                }
+                catch (Exception e)
+                {
+                    Diagnostics.Failure("migration.check", e);
+                    File.WriteAllText(Path.Combine(Home, "migration-result.txt"), "ERROR " + e.GetType().Name);
+                }
+
+                return;
+            }
+
+            if (args.Length == 2 && args[0] == "--probe-selftest")
+            {
+                try
+                {
+                    var choices = Subscriptions.ImportInput(File.ReadAllText(args[1])).Nodes;
+                    int index = choices.FindIndex(delegate (Dictionary<string, object> n)
+                    {
+                        return Profiles.Get(n, "type", "") == "vless" && Profiles.Get(n, "network", "") == "tcp" && n.ContainsKey("reality-opts");
+                    });
+                    long delay = ProbeRunner.Measure(choices[index < 0 ? 0 : index]);
+                    File.WriteAllText(Path.Combine(Home, "probe-result.txt"), "OK latencyMs=" + delay);
+                }
+                catch (Exception e)
+                {
+                    Diagnostics.Failure("probe.selftest", e);
+                    File.WriteAllText(Path.Combine(Home, "probe-result.txt"), "ERROR " + e.GetType().Name);
+                }
+
+                return;
+            }
+
+            if (args.Length == 6 && args[0] == "--watch-probe")
+            {
+                ProbeRunner.Supervise(args);
+                return;
+            }
+
             if (args.Length == 1 && args[0] == "--selftest")
             {
                 SelfTest.Run();
                 return;
             }
 
-            Diagnostics.Write("app.start", "version=0.9 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
+            Diagnostics.Write("app.start", "version=0.10.0 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
             if (args.Length == 1 && args[0] == "--recover")
             {
                 try
@@ -295,7 +338,8 @@ namespace MihomoDesk
     sealed partial class MainForm : Form
     {
         ComboBox servers = new ComboBox();
-        Button refreshButton = new Button(), logsButton = new Button(), importButton = new Button(), fileButton = new Button(), connectButton = new Button(), disconnectButton = new Button(), removeButton = new Button();
+        PowerButton connectButton = new PowerButton();
+        Button refreshButton = new Button(), logsButton = new Button(), importButton = new Button(), fileButton = new Button(), disconnectButton = new Button(), removeButton = new Button();
         Label state = new Label(), detail = new Label();
         CheckBox systemProxy = new CheckBox();
         TextBox log = new TextBox();
@@ -304,7 +348,6 @@ namespace MihomoDesk
         bool busy = false, closing = false;
         int localPort;
         bool activeXray = false;
-        bool filling = false;
         string subscriptionUrl = "", selection = "";
         DateTime subscriptionUpdated = DateTime.MinValue;
         string SubscriptionFile
@@ -329,74 +372,47 @@ namespace MihomoDesk
             BuildSimpleUI();
             importButton.Click += delegate
             {
-                using (ImportDialog dialog = new ImportDialog())
-                {
-                    if (dialog.ShowDialog(this) == DialogResult.OK)
-                        AcceptSubscription(dialog.Downloaded);
-                }
+                ShowAddDialog("");
+            };
+            logsButton.Click += delegate
+            {
+                Diagnostics.Write("ui.logs.open", "");
+                Process.Start("notepad.exe", Quote(Diagnostics.FilePath));
             };
             refreshButton.Click += delegate
             {
                 RefreshSubscription(false, null);
             };
-            servers.SelectedIndexChanged += delegate
+            removeButton.Click += delegate
             {
-                if (filling || servers.SelectedIndex < 0)
-                    return;
-                selection = Subscriptions.NodeKey(nodes[servers.SelectedIndex]);
-                try
-                {
-                    SaveSubscription();
-                }
-                catch (Exception e)
-                {
-                    Diagnostics.Failure("selection.save", e);
-                }
+                if (book.Active != null)
+                    DeleteSubscription(book.ActiveId);
             };
             fileButton.Click += delegate
             {
-                using (OpenFileDialog d = new OpenFileDialog())
+                using (OpenFileDialog dialog = new OpenFileDialog())
                 {
-                    d.Filter = "Профили и ссылки|*.yaml;*.yml;*.json;*.txt|Все файлы|*.*";
-                    if (d.ShowDialog(this) == DialogResult.OK)
-                        try
-                        {
-                            if (new FileInfo(d.FileName).Length > 4 * 1024 * 1024)
-                                throw new Exception("Файл больше 4 МБ.");
-                            Import(File.ReadAllText(d.FileName, Encoding.UTF8));
-                        }
-                        catch (Exception e)
-                        {
-                            Error(e.Message);
-                        }
-                }
-            };
-            removeButton.Click += delegate
-            {
-                if (MessageBox.Show(this, "Удалить все сохранённые профили с этого компьютера?", "Профили", MessageBoxButtons.YesNo) == DialogResult.Yes)
-                {
-                    nodes.Clear();
-                    servers.Items.Clear();
-                    subscriptionUrl = "";
-                    selection = "";
-                    subscriptionUpdated = DateTime.MinValue;
-                    if (File.Exists(Saved))
-                        File.Delete(Saved);
-                    if (File.Exists(SubscriptionFile))
-                        File.Delete(SubscriptionFile);
-                    UpdateButtons();
+                    dialog.Filter = "Настройки VPN|*.json;*.yaml;*.yml;*.txt|Все файлы|*.*";
+                    if (dialog.ShowDialog(this) != DialogResult.OK)
+                        return;
+                    try
+                    {
+                        if (new FileInfo(dialog.FileName).Length > 4 * 1024 * 1024)
+                            throw new IOException();
+                        ShowAddDialog(File.ReadAllText(dialog.FileName, Encoding.UTF8));
+                    }
+                    catch (Exception e)
+                    {
+                        Diagnostics.Failure("import.file", e);
+                        Error("Не удалось открыть файл настроек.");
+                    }
                 }
             };
             connectButton.Click += delegate
             {
                 if (core != null)
                     Disconnect();
-                else if (nodes.Count == 0)
-                {
-                    OpenSettings();
-                    importButton.PerformClick();
-                }
-                else
+                else if (nodes.Count > 0 && !busy)
                     Connect();
             };
             disconnectButton.Click += delegate
@@ -412,7 +428,7 @@ namespace MihomoDesk
                     return;
                 }
 
-                if (busy)
+                if (busy && e.CloseReason == CloseReason.UserClosing)
                 {
                     e.Cancel = true;
                     exitRequested = false;
@@ -421,6 +437,7 @@ namespace MihomoDesk
                 }
 
                 closing = true;
+                ProbeRunner.CancelAll();
                 try
                 {
                     Disconnect();
@@ -429,65 +446,11 @@ namespace MihomoDesk
                 {
                     e.Cancel = true;
                     closing = false;
-                    Error(ex.Message);
+                    Diagnostics.Failure("shutdown", ex);
+                    Error("Не удалось восстановить настройки сети. Сохраните журнал.");
                 }
             };
-            if (File.Exists(Saved))
-                try
-                {
-                    nodes = Profiles.Import(Program.ReadSecret(Saved));
-                    Diagnostics.Nodes(nodes, "saved");
-                    Fill();
-                    Say("Сохранённые серверы загружены.");
-                }
-                catch (Exception ex)
-                {
-                    Diagnostics.Failure("profiles.load", ex);
-                    Say("Не удалось прочитать сохранённые профили. Импортируйте их заново.");
-                }
-
-            if (File.Exists(SubscriptionFile))
-                try
-                {
-                    string content = Program.ReadSecret(SubscriptionFile);
-                    Dictionary<string, object> saved = Profiles.Parse(content) as Dictionary<string, object>;
-                    List<Dictionary<string, object>> loaded = Profiles.Import(content);
-                    nodes = loaded;
-                    subscriptionUrl = Profiles.Get(saved, "url", "");
-                    selection = Profiles.Get(saved, "selected", "");
-                    DateTime.TryParse(Profiles.Get(saved, "updatedUtc", ""), out subscriptionUpdated);
-                    Fill();
-                    Diagnostics.Nodes(nodes, "subscription-saved");
-                }
-                catch (Exception e)
-                {
-                    Diagnostics.Failure("subscription.load", e);
-                    Say("Не удалось прочитать сохранённую подписку; доступен прежний профиль.");
-                }
-
-            string pending = Path.Combine(Application.StartupPath, "pending-profile.json");
-            if (File.Exists(pending))
-                try
-                {
-                    List<Dictionary<string, object>> imported = Profiles.Import(File.ReadAllText(pending, Encoding.UTF8));
-                    imported.RemoveAll(delegate (Dictionary<string, object> n)
-                    {
-                        return !Profiles.Usable(n);
-                    });
-                    if (imported.Count == 0)
-                        throw new Exception();
-                    Program.SaveSecret(Saved, Profiles.Json(Profiles.Map("proxies", imported)));
-                    nodes = imported;
-                    Fill();
-                    Diagnostics.Nodes(nodes, "pending-import");
-                    File.Delete(pending);
-                    Say("Подготовленный профиль импортирован.");
-                }
-                catch (Exception ex)
-                {
-                    Diagnostics.Failure("pending-import", ex);
-                }
-
+            LoadCatalog();
             timer.Interval = 3000;
             timer.Tick += delegate
             {
@@ -495,13 +458,12 @@ namespace MihomoDesk
                 if (core != null && !busy && core.HasExited)
                 {
                     Diagnostics.Write("core.exit", "exit=" + core.ExitCode);
-                    Say("Движок завершил работу. Восстанавливаю настройки Windows.");
                     Disconnect();
+                    SetStatus("Соединение завершено", Color.Firebrick);
                 }
             };
             timer.Start();
-            Diagnostics.Write("ui.ready", "");
-            Say("Добавьте подписку в настройках или используйте сохранённый сервер.");
+            Diagnostics.Write("ui.ready", "subscriptions=" + book.Entries.Count);
             UpdateButtons();
         }
 
@@ -524,136 +486,6 @@ namespace MihomoDesk
         void Error(string s)
         {
             MessageBox.Show(this, s, "VPN", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-
-        void Fill()
-        {
-            filling = true;
-            try
-            {
-                servers.Items.Clear();
-                foreach (Dictionary<string, object> n in nodes)
-                    servers.Items.Add(Profiles.Get(n, "name", ""));
-                servers.SelectedIndex = Subscriptions.Selection(nodes, selection);
-                if (servers.SelectedIndex >= 0)
-                    selection = Subscriptions.NodeKey(nodes[servers.SelectedIndex]);
-            }
-            finally
-            {
-                filling = false;
-            }
-        }
-
-        void SaveSubscription()
-        {
-            if (nodes.Count > 0)
-                Program.SaveSecret(SubscriptionFile, Profiles.Json(Subscriptions.Envelope(subscriptionUrl, nodes, selection, subscriptionUpdated)));
-        }
-
-        void AcceptSubscription(SubscriptionResult result)
-        {
-            try
-            {
-                string chosen = selection;
-                int i = Subscriptions.Selection(result.Nodes, chosen);
-                if (i >= 0)
-                    chosen = Subscriptions.NodeKey(result.Nodes[i]);
-                Program.SaveSecret(SubscriptionFile, Profiles.Json(Subscriptions.Envelope(result.Url, result.Nodes, chosen, result.UpdatedUtc)));
-                nodes = result.Nodes;
-                subscriptionUrl = result.Url;
-                subscriptionUpdated = result.UpdatedUtc;
-                selection = chosen;
-                Fill();
-                Diagnostics.Write("subscription.saved", "nodes=" + nodes.Count);
-                Say((subscriptionUrl == "" ? "Настройки серверов сохранены. " : "Подписка сохранена. ") + "Серверов: " + nodes.Count + ". Дальше достаточно нажать «Подключить».");
-                UpdateButtons();
-            }
-            catch (Exception e)
-            {
-                Diagnostics.Failure("subscription.save", e);
-                Error("Не удалось сохранить обновление. Прежние данные не удалены.");
-            }
-        }
-
-        void RefreshSubscription(bool quiet, Action after)
-        {
-            if (subscriptionUrl == "" || busy || core != null)
-            {
-                if (after != null)
-                    after();
-                return;
-            }
-
-            busy = true;
-            UpdateButtons();
-            SetStatus("Обновление серверов…", Muted);
-            string url = subscriptionUrl;
-            BackgroundWorker worker = new BackgroundWorker();
-            worker.DoWork += delegate (object sender, DoWorkEventArgs e)
-            {
-                e.Result = Subscriptions.Download(url);
-            };
-            worker.RunWorkerCompleted += delegate (object sender, RunWorkerCompletedEventArgs e)
-            {
-                busy = false;
-                if (e.Error != null)
-                {
-                    Diagnostics.Failure("subscription.refresh", e.Error);
-                    Say("Обновление не удалось. Сохранённые серверы остаются доступны.");
-                    if (!quiet)
-                        Error("Не удалось обновить подписку. Прежние серверы сохранены; подробности в журнале.");
-                }
-                else
-                    AcceptSubscription((SubscriptionResult)e.Result);
-                SetStatus("Не подключено", Muted);
-                UpdateButtons();
-                worker.Dispose();
-                if (after != null)
-                    after();
-            };
-            worker.RunWorkerAsync();
-        }
-
-        void Import(string text)
-        {
-            Diagnostics.Input(text);
-            try
-            {
-                List<Dictionary<string, object>> imported = Profiles.Import(text);
-                Diagnostics.Nodes(imported, "import");
-                imported.RemoveAll(delegate (Dictionary<string, object> n)
-                {
-                    return !Profiles.Usable(n);
-                });
-                if (imported.Count == 0)
-                    throw new InvalidDataException("Подписка содержит только заглушку app not supported. Рабочих серверов нет. Загрузите подписку заново.");
-                Program.SaveSecret(SubscriptionFile, Profiles.Json(Subscriptions.Envelope("", imported, "", DateTime.MinValue)));
-                nodes = imported;
-                subscriptionUrl = "";
-                subscriptionUpdated = DateTime.MinValue;
-                selection = "";
-                Fill();
-                Say("Импортировано серверов: " + nodes.Count + ". Маршрутизация: весь трафик через выбранный сервер; исходные правила профиля не импортируются.");
-                UpdateButtons();
-            }
-            catch (Exception e)
-            {
-                Diagnostics.Failure("import", e);
-                Error(e.Message);
-            }
-        }
-
-        void UpdateButtons()
-        {
-            bool running = core != null;
-            connectButton.Enabled = !busy;
-            connectButton.Text = running ? "Отключить" : nodes.Count == 0 ? "Добавить подписку" : "Подключить";
-            RefreshTrayText();
-            disconnectButton.Enabled = !busy && running;
-            servers.Enabled = !busy && !running;
-            systemProxy.Enabled = !busy && !running;
-            importButton.Enabled = fileButton.Enabled = removeButton.Enabled = !busy && !running;
-            refreshButton.Enabled = !busy && !running && subscriptionUrl != "";
         }
 
         static int FreePort()
@@ -856,6 +688,9 @@ namespace MihomoDesk
                 else
                 {
                     core = (Process)e.Result;
+                    connectedEntryId = book.ActiveId;
+                    connectedNodeKey = selection;
+                    sessionClock.Reset();
                     Diagnostics.Write("connect.ready", "port=" + localPort + " pid=" + core.Id);
                     generation++;
                     lastProbe = DateTime.MinValue;
@@ -874,6 +709,10 @@ namespace MihomoDesk
 
         void Disconnect()
         {
+            sessionClock.Reset();
+            connectButton.Elapsed = "00:00:00";
+            connectedEntryId = "";
+            connectedNodeKey = "";
             generation++;
             downText = upText = "—";
             downRate.Text = upRate.Text = "—";
@@ -904,49 +743,78 @@ namespace MihomoDesk
 
     sealed class ImportDialog : Form
     {
-        TextBox url = new TextBox();
-        Button save = new Button(), cancel = new Button();
+        TextBox url = new TextBox(), name = new TextBox();
+        Button save = new Button(), cancel = new Button(), paste = new Button(), file = new Button();
         Label hint = new Label();
-        bool loading = false;
+        bool loading;
         public SubscriptionResult Downloaded;
-        public ImportDialog()
+        public ImportDialog() : this("")
         {
-            Text = "Добавить подписку или сервер";
-            ClientSize = new Size(630, 325);
-            MinimumSize = new Size(640, 360);
-            MaximumSize = new Size(1000, 600);
+        }
+
+        public ImportDialog(string initial)
+        {
+            Text = "Добавить подключение";
+            ClientSize = new Size(610, 425);
+            MinimumSize = new Size(620, 465);
             StartPosition = FormStartPosition.CenterParent;
             Font = new Font("Segoe UI", 10);
+            BackColor = Color.FromArgb(247, 249, 253);
             TableLayoutPanel p = new TableLayoutPanel();
-            p.Padding = new Padding(18);
             p.Dock = DockStyle.Fill;
-            p.RowCount = 4;
+            p.Padding = new Padding(20);
             p.ColumnCount = 1;
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            p.RowCount = 7;
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             Controls.Add(p);
-            hint.Text = "Вставьте ссылку подписки, ссылку сервера или список ссылок — по одной на строку.";
+            Label title = new Label();
+            title.Text = "Название · необязательно";
+            title.AutoSize = true;
+            title.ForeColor = Color.DimGray;
+            p.Controls.Add(title);
+            name.Dock = DockStyle.Top;
+            p.Controls.Add(name);
+            hint.Text = "Вставьте ссылку подписки, ссылку сервера или JSON-настройки. Несколько ссылок — по одной на строку.";
             hint.Dock = DockStyle.Fill;
             p.Controls.Add(hint);
-            url.Dock = DockStyle.Fill;
+            FlowLayoutPanel helpers = new FlowLayoutPanel();
+            helpers.Dock = DockStyle.Fill;
+            paste.Text = "Вставить";
+            paste.Size = new Size(110, 29);
+            file.Text = "Открыть файл…";
+            file.Size = new Size(145, 29);
+            helpers.Controls.AddRange(new Control[] { paste, file });
+            p.Controls.Add(helpers);
             url.Multiline = true;
-            url.ScrollBars = ScrollBars.Vertical;
             url.AcceptsReturn = true;
+            url.ScrollBars = ScrollBars.Vertical;
+            url.Dock = DockStyle.Fill;
+            url.Text = initial;
             p.Controls.Add(url);
             FlowLayoutPanel buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Fill;
-            save.Text = "Сохранить";
-            save.Size = new Size(150, 34);
+            buttons.Padding = new Padding(0, 5, 0, 0);
+            save.Text = "Добавить";
+            save.Size = new Size(150, 33);
+            save.BackColor = Color.FromArgb(57, 92, 229);
+            save.ForeColor = Color.White;
+            save.FlatStyle = FlatStyle.Flat;
+            save.FlatAppearance.BorderSize = 0;
             cancel.Text = "Отмена";
-            cancel.Size = new Size(110, 34);
+            cancel.Size = new Size(110, 33);
             buttons.Controls.AddRange(new Control[] { save, cancel });
             p.Controls.Add(buttons);
             Label privacy = new Label();
-            privacy.Text = "Настройки хранятся зашифрованно. Подписки обновляются автоматически; отдельные ссылки серверов сохраняются без автообновления.";
-            privacy.Dock = DockStyle.Fill;
+            privacy.Text = "Настройки сохраняются зашифрованно. Ошибка добавления не затронет другие подключения. Пароли и ключи не попадают в журнал.";
             privacy.Font = new Font("Segoe UI", 8);
+            privacy.ForeColor = Color.DimGray;
+            privacy.Dock = DockStyle.Fill;
             p.Controls.Add(privacy);
             AcceptButton = save;
             cancel.Click += delegate
@@ -957,6 +825,39 @@ namespace MihomoDesk
             {
                 BeginDownload();
             };
+            paste.Click += delegate
+            {
+                try
+                {
+                    if (Clipboard.ContainsText())
+                        url.Text = Clipboard.GetText();
+                }
+                catch
+                {
+                    MessageBox.Show(this, "Не удалось прочитать буфер обмена. Вставьте текст с помощью Ctrl+V.");
+                }
+            };
+            file.Click += delegate
+            {
+                using (OpenFileDialog d = new OpenFileDialog())
+                {
+                    d.Filter = "Настройки VPN|*.json;*.yaml;*.yml;*.txt|Все файлы|*.*";
+                    if (d.ShowDialog(this) != DialogResult.OK)
+                        return;
+                    try
+                    {
+                        if (new FileInfo(d.FileName).Length > 4 * 1024 * 1024)
+                            throw new IOException();
+                        url.Text = File.ReadAllText(d.FileName, Encoding.UTF8);
+                        if (name.Text.Trim() == "")
+                            name.Text = Path.GetFileNameWithoutExtension(d.FileName);
+                    }
+                    catch
+                    {
+                        MessageBox.Show(this, "Не удалось прочитать файл настроек.");
+                    }
+                }
+            };
             FormClosing += delegate (object sender, FormClosingEventArgs e)
             {
                 if (loading)
@@ -966,12 +867,18 @@ namespace MihomoDesk
 
         void BeginDownload()
         {
+            if (String.IsNullOrEmpty(url.Text.Trim()))
+            {
+                MessageBox.Show(this, "Вставьте ссылку или откройте файл настроек.", "Добавить подключение");
+                return;
+            }
+
             try
             {
                 if (Subscriptions.IsSubscriptionLink(url.Text))
                 {
                     Uri source = Subscriptions.Validate(url.Text);
-                    if (source.Scheme == "http" && MessageBox.Show(this, "Эта подписка загружается без шифрования. Ссылка и настройки могут быть видны участникам сети. Продолжить?", "HTTP-подписка", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                    if (source.Scheme == "http" && MessageBox.Show(this, "Эта подписка передаётся без шифрования. Продолжить?", "HTTP-подписка", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                         return;
                 }
             }
@@ -981,24 +888,35 @@ namespace MihomoDesk
                 return;
             }
 
-            string input = url.Text;
+            string input = url.Text, title = name.Text.Trim();
             loading = true;
-            save.Enabled = cancel.Enabled = url.Enabled = false;
-            hint.Text = "Проверка и сохранение настроек…";
+            save.Enabled = cancel.Enabled = url.Enabled = name.Enabled = paste.Enabled = file.Enabled = false;
+            hint.Text = "Проверяем настройки…";
             BackgroundWorker worker = new BackgroundWorker();
             worker.DoWork += delegate (object sender, DoWorkEventArgs e)
             {
-                e.Result = Subscriptions.ImportInput(input);
+                SubscriptionResult result = Subscriptions.ImportInput(input);
+                result.Name = title;
+                if (result.Name == "")
+                {
+                    Uri u;
+                    if (Subscriptions.IsSubscriptionLink(input) && Uri.TryCreate(input.Trim(), UriKind.Absolute, out u))
+                        result.Name = u.Fragment.Length > 1 ? Uri.UnescapeDataString(u.Fragment.Substring(1)) : u.Host;
+                    else
+                        result.Name = "Мои серверы";
+                }
+
+                e.Result = result;
             };
             worker.RunWorkerCompleted += delegate (object sender, RunWorkerCompletedEventArgs e)
             {
                 loading = false;
-                save.Enabled = cancel.Enabled = url.Enabled = true;
+                save.Enabled = cancel.Enabled = url.Enabled = name.Enabled = paste.Enabled = file.Enabled = true;
                 if (e.Error != null)
                 {
                     Diagnostics.Failure("subscription.add", e.Error);
-                    hint.Text = "Не удалось загрузить подписку. Прежние серверы сохранены.";
-                    MessageBox.Show(this, "Не удалось получить рабочую подписку. Проверьте ссылку и доступность сервиса. Подробности записаны в журнал.", "Подписка");
+                    hint.Text = "Не удалось добавить подключение. Остальные подписки не изменены.";
+                    MessageBox.Show(this, "Не удалось прочитать настройки или загрузить серверы. Проверьте ссылку. Подробности доступны в журнале.", "Добавить подключение");
                 }
                 else
                 {

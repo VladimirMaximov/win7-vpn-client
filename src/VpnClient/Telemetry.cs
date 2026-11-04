@@ -115,14 +115,7 @@ namespace MihomoDesk
         {
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
-                HttpWebRequest r = (HttpWebRequest)WebRequest.Create("https://example.com/");
-                r.Method = "HEAD";
-                r.Proxy = new WebProxy("http://127.0.0.1:" + port);
-                r.Timeout = 5000;
-                r.ReadWriteTimeout = 5000;
-                using (HttpWebResponse response = (HttpWebResponse)r.GetResponse())
-                    return (int)response.StatusCode >= 200 && (int)response.StatusCode < 400;
+                return ProbeRunner.MeasureProxy(port) > 0;
             }
             catch
             {

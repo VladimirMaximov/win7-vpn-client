@@ -45,6 +45,61 @@ namespace MihomoDesk
             } // A logging failure must never prevent proxy recovery.
         }
 
+        public static void ExportLog(string destination, string version)
+        {
+            string target = Path.GetFullPath(destination);
+            string snapshot = "";
+            lock (Gate)
+            {
+                for (int i = 2; i >= 0; i--)
+                {
+                    string file = FilePath + (i == 0 ? "" : "." + i);
+                    if (target.Equals(Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Choose another output file");
+                    if (File.Exists(file))
+                        snapshot += File.ReadAllText(file) + Environment.NewLine;
+                }
+            }
+
+            string first = "", last = "";
+            foreach (string line in snapshot.Split('\n'))
+            {
+                int space = line.IndexOf(' ');
+                if (space > 0)
+                {
+                    DateTime time;
+                    if (DateTime.TryParse(line.Substring(0, space), out time))
+                    {
+                        if (first == "")
+                            first = time.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss");
+                        last = time.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss");
+                    }
+                }
+            }
+
+            string temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (StreamWriter writer = new StreamWriter(temp, false, Encoding.UTF8))
+                {
+                    writer.WriteLine("VPN " + version + " · журнал диагностики");
+                    writer.WriteLine("Период UTC: " + (first == "" ? "событий нет" : first + " — " + last));
+                    writer.WriteLine();
+                    writer.Write(snapshot);
+                }
+
+                if (File.Exists(target))
+                    File.Replace(temp, target, null);
+                else
+                    File.Move(temp, target);
+            }
+            finally
+            {
+                if (File.Exists(temp))
+                    File.Delete(temp);
+            }
+        }
+
         public static void Failure(string stage, Exception e)
         {
             int depth = 0;
@@ -110,7 +165,7 @@ namespace MihomoDesk
             if (String.IsNullOrEmpty(line))
                 return;
             string s = line.ToLowerInvariant();
-            string level = s.Contains("level=error") || s.Contains("level=fatal") ? "error" : s.Contains("level=warning") ? "warning" : "info";
+            string level = s.Contains("level=error") || s.Contains("level=fatal") || s.Contains("[error]") || s.Contains("[fatal]") ? "error" : s.Contains("level=warning") || s.Contains("[warning]") ? "warning" : "info";
             string category = s.Contains("certificate") || s.Contains("x509") ? "certificate" : s.Contains("timeout") || s.Contains("timed out") ? "timeout" : s.Contains("no such host") || s.Contains("dns") ? "dns" : s.Contains("refused") ? "connection-refused" : s.Contains("unreachable") ? "unreachable" : s.Contains("handshake") || s.Contains("tls") ? "tls-handshake" : s.Contains("eof") ? "unexpected-eof" : s.Contains("authentication") || s.Contains("invalid user") ? "authentication" : s.Contains("listen") || s.Contains("address already in use") ? "listener" : s.Contains("test is successful") ? "config-valid" : s.Contains("test failed") || s.Contains("parse") || s.Contains("expected type") ? "configuration" : s.Contains("dial") ? "dial" : "other";
             Write("core.event", "test=" + test + " level=" + level + " category=" + category);
         }

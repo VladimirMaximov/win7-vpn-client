@@ -23,6 +23,8 @@ namespace MihomoDesk
         long lastUp = 0, lastDown = 0;
         bool metricsErrorLogged = false;
         EventWaitHandle showSignal;
+        Stopwatch sessionClock = new Stopwatch();
+        System.Windows.Forms.Timer clockTimer = new System.Windows.Forms.Timer();
         MenuItem trayToggle;
         string statusText = "Не подключено", downText = "—", upText = "—";
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -32,81 +34,122 @@ namespace MihomoDesk
         {
             Text = "VPN";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            ClientSize = new Size(540, 510);
-            MinimumSize = new Size(540, 550);
+            ClientSize = new Size(620, Math.Max(620, Math.Min(740, Screen.PrimaryScreen.WorkingArea.Height - 70)));
+            MinimumSize = new Size(620, 660);
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Segoe UI", 10);
             BackColor = Color.FromArgb(244, 247, 252);
             TableLayoutPanel p = new TableLayoutPanel();
             p.Dock = DockStyle.Fill;
-            p.Padding = new Padding(30, 22, 30, 16);
+            p.Padding = new Padding(24, 16, 24, 12);
             p.ColumnCount = 1;
-            p.RowCount = 9;
-            foreach (int h in new int[]
-            {
-                40,
-                54,
-                25,
-                42,
-                76,
-                110,
-                60,
-                42
-            }
-
-            )
-                p.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            p.RowCount = 6;
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            Controls.Add(p);
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            Panel content = new Panel();
+            content.Dock = DockStyle.Fill;
+            Controls.Add(content);
+            p.Dock = DockStyle.None;
+            content.Controls.Add(p);
+            content.Resize += delegate
+            {
+                int width = Math.Min(content.ClientSize.Width, (int)(600 * Font.Size / 10f));
+                p.SetBounds((content.ClientSize.Width - width) / 2, 0, width, content.ClientSize.Height);
+            };
+            TableLayoutPanel header = new TableLayoutPanel();
+            header.Dock = DockStyle.Fill;
+            header.ColumnCount = 2;
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            p.Controls.Add(header);
             Label title = new Label();
             title.Text = "VPN";
-            title.Font = new Font("Segoe UI", 21, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 20, FontStyle.Bold);
             title.ForeColor = Ink;
             title.AutoSize = true;
-            p.Controls.Add(title);
+            header.Controls.Add(title, 0, 0);
+            Setup(settingsButton, "Настройки", 120);
+            settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            settingsButton.FlatAppearance.BorderSize = 0;
+            settingsButton.ForeColor = Muted;
+            header.Controls.Add(settingsButton, 1, 0);
+            Panel hero = new Panel();
+            hero.Dock = DockStyle.Fill;
+            hero.Margin = new Padding(0);
+            connectButton.Size = new Size(194, 194);
+            hero.Controls.Add(connectButton);
+            hero.Resize += delegate
+            {
+                connectButton.Location = new Point((hero.ClientSize.Width - connectButton.Width) / 2, 0);
+            };
             state.Text = "Не подключено";
-            state.Font = new Font("Segoe UI", 19, FontStyle.Bold);
+            state.Font = new Font("Segoe UI", 12, FontStyle.Bold);
             state.ForeColor = Muted;
-            state.Dock = DockStyle.Fill;
-            state.TextAlign = ContentAlignment.MiddleLeft;
-            p.Controls.Add(state);
-            Label serverLabel = new Label();
-            serverLabel.Text = "Сервер";
-            serverLabel.ForeColor = Muted;
-            serverLabel.Dock = DockStyle.Fill;
-            p.Controls.Add(serverLabel);
-            servers.DropDownStyle = ComboBoxStyle.DropDownList;
-            servers.Dock = DockStyle.Top;
-            servers.DropDownWidth = 480;
-            p.Controls.Add(servers);
-            Setup(connectButton, "Подключить", 450);
-            connectButton.Dock = DockStyle.Top;
-            connectButton.Height = 58;
-            connectButton.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-            connectButton.BackColor = Blue;
-            connectButton.ForeColor = Color.White;
-            connectButton.FlatAppearance.BorderSize = 0;
-            p.Controls.Add(connectButton);
+            state.Dock = DockStyle.Bottom;
+            state.Height = 30;
+            state.TextAlign = ContentAlignment.MiddleCenter;
+            hero.Controls.Add(state);
+            p.Controls.Add(hero);
+            TableLayoutPanel section = new TableLayoutPanel();
+            section.Dock = DockStyle.Fill;
+            section.ColumnCount = 2;
+            section.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
+            section.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            Label caption = new Label();
+            caption.Text = "Подписки";
+            caption.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+            caption.ForeColor = Ink;
+            caption.AutoSize = true;
+            caption.Anchor = AnchorStyles.Left;
+            section.Controls.Add(caption, 0, 0);
+            Setup(addSubscriptionButton, "+ Добавить", 125);
+            addSubscriptionButton.Anchor = AnchorStyles.Right;
+            addSubscriptionButton.ForeColor = Blue;
+            addSubscriptionButton.FlatAppearance.BorderSize = 0;
+            addSubscriptionButton.Click += delegate
+            {
+                ShowAddDialog("");
+            };
+            section.Controls.Add(addSubscriptionButton, 1, 0);
+            p.Controls.Add(section);
+            cardsHost.Dock = DockStyle.Fill;
+            cardsHost.AutoScroll = true;
+            cardsHost.WrapContents = false;
+            cardsHost.FlowDirection = FlowDirection.TopDown;
+            cardsHost.Margin = new Padding(0, 0, 0, 8);
+            cardsHost.Resize += delegate
+            {
+                foreach (Control card in cardsHost.Controls)
+                    card.Width = Math.Max(300, cardsHost.ClientSize.Width - 22);
+            };
+            p.Controls.Add(cardsHost);
+            RoundedPanel trafficCard = new RoundedPanel();
+            trafficCard.Dock = DockStyle.Fill;
+            trafficCard.Padding = new Padding(14, 5, 14, 5);
             TableLayoutPanel traffic = new TableLayoutPanel();
-            traffic.BackColor = Color.White;
             traffic.Dock = DockStyle.Fill;
-            traffic.Padding = new Padding(15, 10, 15, 10);
             traffic.ColumnCount = 2;
             traffic.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             traffic.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             traffic.RowCount = 3;
+            trafficCard.Controls.Add(traffic);
+            p.Controls.Add(trafficCard);
             Label received = new Label();
-            received.Text = "↓ Входящий";
-            received.ForeColor = Muted;
+            received.Text = "↓ Получено";
             received.AutoSize = true;
-            traffic.Controls.Add(received, 0, 0);
+            received.ForeColor = Muted;
             Label sent = new Label();
-            sent.Text = "↑ Исходящий";
-            sent.ForeColor = Muted;
+            sent.Text = "↑ Отправлено";
             sent.AutoSize = true;
+            sent.ForeColor = Muted;
+            traffic.Controls.Add(received, 0, 0);
             traffic.Controls.Add(sent, 1, 0);
-            foreach (Label l in new Label[]
+            foreach (Label label in new Label[]
             {
                 downRate,
                 upRate
@@ -114,15 +157,15 @@ namespace MihomoDesk
 
             )
             {
-                l.Text = "—";
-                l.Font = new Font("Segoe UI", 16, FontStyle.Bold);
-                l.ForeColor = Ink;
-                l.AutoSize = true;
+                label.Text = "—";
+                label.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+                label.ForeColor = Ink;
+                label.AutoSize = true;
             }
 
             traffic.Controls.Add(downRate, 0, 1);
             traffic.Controls.Add(upRate, 1, 1);
-            foreach (Label l in new Label[]
+            foreach (Label label in new Label[]
             {
                 downTotal,
                 upTotal
@@ -130,30 +173,40 @@ namespace MihomoDesk
 
             )
             {
-                l.Text = "За сеанс: —";
-                l.Font = new Font("Segoe UI", 8);
-                l.ForeColor = Muted;
-                l.AutoSize = true;
+                label.Text = "За сеанс: —";
+                label.Font = new Font("Segoe UI", 8);
+                label.ForeColor = Muted;
+                label.AutoSize = true;
             }
 
             traffic.Controls.Add(downTotal, 0, 2);
             traffic.Controls.Add(upTotal, 1, 2);
-            p.Controls.Add(traffic);
-            FlowLayoutPanel actions = new FlowLayoutPanel();
-            actions.Dock = DockStyle.Fill;
-            actions.Padding = new Padding(0, 9, 0, 0);
-            Setup(settingsButton, "Настройки", 120);
-            Setup(exportButton, "Сохранить журнал", 190);
-            actions.Controls.AddRange(new Control[] { settingsButton, exportButton });
-            p.Controls.Add(actions);
-            detail.Text = "Закрытие окна сворачивает VPN к часам. Для выхода используйте меню значка.";
-            detail.Font = new Font("Segoe UI", 8);
-            detail.ForeColor = Muted;
-            detail.Dock = DockStyle.Fill;
-            p.Controls.Add(detail);
+            TableLayoutPanel footer = new TableLayoutPanel();
+            footer.Dock = DockStyle.Fill;
+            footer.ColumnCount = 2;
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            Setup(exportButton, "Сохранить журнал", 175);
+            exportButton.Margin = new Padding(0, 7, 0, 0);
+            exportButton.Font = new Font("Segoe UI", 9);
+            exportButton.FlatAppearance.BorderColor = Color.FromArgb(222, 229, 241);
+            footer.Controls.Add(exportButton, 0, 0);
+            notice.Text = "Закрытие окна сворачивает VPN к часам.";
+            notice.ForeColor = Muted;
+            notice.Font = new Font("Segoe UI", 8);
+            notice.Dock = DockStyle.Fill;
+            notice.TextAlign = ContentAlignment.MiddleLeft;
+            footer.Controls.Add(notice, 1, 0);
+            p.Controls.Add(footer);
             systemProxy.Checked = true;
             log.Multiline = true;
-            log.ReadOnly = true; // Support controls stay out of the main screen.
+            log.ReadOnly = true;
+            clockTimer.Interval = 1000;
+            clockTimer.Tick += delegate
+            {
+                UpdateClock();
+            };
+            clockTimer.Start();
             settingsButton.Click += delegate
             {
                 OpenSettings();
@@ -216,6 +269,8 @@ namespace MihomoDesk
             FormClosed += delegate
             {
                 timer.Stop();
+                clockTimer.Stop();
+                clockTimer.Dispose();
                 showSignal.Close();
                 if (tray != null)
                 {
@@ -244,6 +299,10 @@ namespace MihomoDesk
         void SetStatus(string text, Color color)
         {
             statusText = text;
+            if (text == "Подключено" && core != null && !sessionClock.IsRunning)
+                sessionClock.Start();
+            connectButton.Healthy = text == "Подключено";
+            connectButton.Invalidate();
             state.Text = text;
             state.ForeColor = color;
             if (tray == null)
@@ -288,7 +347,20 @@ namespace MihomoDesk
             }
 
             if (popup != null && !popup.IsDisposed)
-                popup.UpdateStatus(statusText, downText, upText, core != null, !busy && (core != null || nodes.Count > 0));
+                popup.UpdateStatus(statusText, downText, upText, core != null, !busy && (core != null || nodes.Count > 0), ClockText());
+        }
+
+        string ClockText()
+        {
+            TimeSpan t = sessionClock.Elapsed;
+            return ((int)t.TotalHours).ToString("00") + ":" + t.Minutes.ToString("00") + ":" + t.Seconds.ToString("00");
+        }
+
+        void UpdateClock()
+        {
+            connectButton.Elapsed = ClockText();
+            connectButton.Invalidate();
+            RefreshTrayText();
         }
 
         void ShowPopup()
@@ -327,7 +399,7 @@ namespace MihomoDesk
                 p.WrapContents = false;
                 settingsForm.Controls.Add(p);
                 Label title = new Label();
-                title.Text = "Подписка и помощь";
+                title.Text = "Настройки и помощь";
                 title.Font = new Font("Segoe UI", 15, FontStyle.Bold);
                 title.AutoSize = true;
                 p.Controls.Add(title);
@@ -372,7 +444,7 @@ namespace MihomoDesk
                 };
                 p.Controls.Add(licenses);
                 Label version = new Label();
-                version.Text = "VPN 0.9 · настройки сохраняются на этом компьютере";
+                version.Text = "VPN 0.10.0 · настройки сохраняются на этом компьютере";
                 version.Font = new Font("Segoe UI", 8);
                 version.AutoSize = true;
                 version.Margin = new Padding(0, 12, 0, 0);
@@ -402,22 +474,15 @@ namespace MihomoDesk
             using (SaveFileDialog d = new SaveFileDialog())
             {
                 d.Filter = "Журнал диагностики|*.log";
-                d.FileName = "VPN-diagnostics.log";
+                d.FileName = "VPN-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".log";
+                d.DefaultExt = "log";
+                d.AddExtension = true;
+                d.OverwritePrompt = true;
                 if (d.ShowDialog(this) != DialogResult.OK)
                     return;
                 try
                 {
-                    using (StreamWriter writer = new StreamWriter(d.FileName, false, System.Text.Encoding.UTF8))
-                    {
-                        writer.WriteLine("VPN 0.9 · журнал диагностики");
-                        for (int i = 2; i >= 0; i--)
-                        {
-                            string path = Diagnostics.FilePath + (i == 0 ? "" : "." + i);
-                            if (File.Exists(path))
-                                writer.Write(File.ReadAllText(path));
-                        }
-                    }
-
+                    Diagnostics.ExportLog(d.FileName, "0.10.0");
                     MessageBox.Show("Журнал сохранён. Его можно отправить человеку, который помогает с настройкой.", "VPN");
                 }
                 catch (Exception e)
@@ -517,12 +582,12 @@ namespace MihomoDesk
 
     sealed class StatusPopup : Form
     {
-        Label status = new Label(), traffic = new Label();
+        Label status = new Label(), traffic = new Label(), elapsed = new Label();
         Button toggle = new Button();
         public StatusPopup(Action action, Action open)
         {
             Text = "VPN";
-            Size = new Size(320, 215);
+            Size = new Size(320, 245);
             FormBorderStyle = FormBorderStyle.FixedToolWindow;
             ShowInTaskbar = false;
             TopMost = true;
@@ -538,6 +603,10 @@ namespace MihomoDesk
             status.Font = new Font("Segoe UI", 13, FontStyle.Bold);
             status.AutoSize = true;
             p.Controls.Add(status);
+            elapsed.AutoSize = true;
+            elapsed.ForeColor = Color.DimGray;
+            elapsed.Margin = new Padding(0, 6, 0, 0);
+            p.Controls.Add(elapsed);
             traffic.AutoSize = true;
             traffic.Margin = new Padding(0, 12, 0, 12);
             p.Controls.Add(traffic);
@@ -567,9 +636,10 @@ namespace MihomoDesk
             };
         }
 
-        public void UpdateStatus(string s, string down, string up, bool connected, bool enabled)
+        public void UpdateStatus(string s, string down, string up, bool connected, bool enabled, string duration)
         {
             status.Text = s;
+            elapsed.Text = "Время подключения: " + duration;
             traffic.Text = "↓ " + down + "     ↑ " + up;
             toggle.Text = connected ? "Отключить" : "Подключить";
             toggle.Enabled = enabled;
