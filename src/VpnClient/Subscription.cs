@@ -78,7 +78,7 @@ namespace MihomoDesk
             Uri uri = Validate(url);
             string[] agents =
             {
-                "Win7VpnClient/0.10.0",
+                "Win7VpnClient/0.10.1",
                 "clash.meta/1.19.33",
                 "v2rayN/7.15.7",
                 "Hiddify/2.5.7",

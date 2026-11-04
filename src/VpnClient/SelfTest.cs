@@ -55,7 +55,22 @@ namespace MihomoDesk
                 ((Label)typeof(MainForm).GetField("notice", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f)).Text = "Предпросмотр · примеры подписок";
                 f.Show();
                 Application.DoEvents();
+                Control content = f.Controls[0];
+                Control column = content.Controls[0];
+                if (column.Height != content.ClientSize.Height || column.Width < 500 || column.Right > content.ClientSize.Width)
+                    throw new Exception("Initial window layout failed");
+                PowerButton power = (PowerButton)typeof(MainForm).GetField("connectButton", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f);
+                if (Math.Abs(power.Left - (power.Parent.ClientSize.Width - power.Width) / 2) > 1)
+                    throw new Exception("Initial connect button alignment failed");
                 Draw(f, "vpn-main.png");
+                Size originalSize = f.ClientSize;
+                f.ClientSize = new Size(960, originalSize.Height);
+                Application.DoEvents();
+                if (column.Width > 650 || Math.Abs(column.Left - (content.ClientSize.Width - column.Width) / 2) > 1)
+                    throw new Exception("Resized content column layout failed");
+                Draw(f, "vpn-wide.png");
+                f.ClientSize = originalSize;
+                Application.DoEvents();
                 MethodInfo settings = typeof(MainForm).GetMethod("OpenSettings", BindingFlags.Instance | BindingFlags.NonPublic);
                 settings.Invoke(f, null);
                 Application.DoEvents();

@@ -56,11 +56,15 @@ namespace MihomoDesk
             Controls.Add(content);
             p.Dock = DockStyle.None;
             content.Controls.Add(p);
-            content.Resize += delegate
+            EventHandler layoutContent = delegate
             {
                 int width = Math.Min(content.ClientSize.Width, (int)(600 * Font.Size / 10f));
                 p.SetBounds((content.ClientSize.Width - width) / 2, 0, width, content.ClientSize.Height);
             };
+            content.Resize += layoutContent;
+            Load += layoutContent;
+            Shown += layoutContent;
+            layoutContent(null, EventArgs.Empty);
             TableLayoutPanel header = new TableLayoutPanel();
             header.Dock = DockStyle.Fill;
             header.ColumnCount = 2;
@@ -83,7 +87,7 @@ namespace MihomoDesk
             hero.Margin = new Padding(0);
             connectButton.Size = new Size(194, 194);
             hero.Controls.Add(connectButton);
-            hero.Resize += delegate
+            hero.Layout += delegate
             {
                 connectButton.Location = new Point((hero.ClientSize.Width - connectButton.Width) / 2, 0);
             };
@@ -444,7 +448,7 @@ namespace MihomoDesk
                 };
                 p.Controls.Add(licenses);
                 Label version = new Label();
-                version.Text = "VPN 0.10.0 · настройки сохраняются на этом компьютере";
+                version.Text = "VPN 0.10.1 · настройки сохраняются на этом компьютере";
                 version.Font = new Font("Segoe UI", 8);
                 version.AutoSize = true;
                 version.Margin = new Padding(0, 12, 0, 0);
@@ -482,7 +486,7 @@ namespace MihomoDesk
                     return;
                 try
                 {
-                    Diagnostics.ExportLog(d.FileName, "0.10.0");
+                    Diagnostics.ExportLog(d.FileName, "0.10.1");
                     MessageBox.Show("Журнал сохранён. Его можно отправить человеку, который помогает с настройкой.", "VPN");
                 }
                 catch (Exception e)
