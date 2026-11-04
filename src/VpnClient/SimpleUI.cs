@@ -38,19 +38,19 @@ namespace MihomoDesk
             MinimumSize = new Size(620, 660);
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
-            Font = new Font("Segoe UI", 10);
-            BackColor = Color.FromArgb(244, 247, 252);
+            Font = new Font("Segoe UI", 9);
+            BackColor = SystemColors.Control;
             TableLayoutPanel p = new TableLayoutPanel();
             p.Dock = DockStyle.Fill;
-            p.Padding = new Padding(24, 16, 24, 12);
+            p.Padding = new Padding(12);
             p.ColumnCount = 1;
             p.RowCount = 6;
             p.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             p.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             p.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            p.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
             Panel content = new Panel();
             content.Dock = DockStyle.Fill;
             Controls.Add(content);
@@ -58,7 +58,7 @@ namespace MihomoDesk
             content.Controls.Add(p);
             EventHandler layoutContent = delegate
             {
-                int width = Math.Min(content.ClientSize.Width, (int)(600 * Font.Size / 10f));
+                int width = Math.Min(content.ClientSize.Width, 600);
                 p.SetBounds((content.ClientSize.Width - width) / 2, 0, width, content.ClientSize.Height);
             };
             content.Resize += layoutContent;
@@ -73,19 +73,19 @@ namespace MihomoDesk
             p.Controls.Add(header);
             Label title = new Label();
             title.Text = "VPN";
-            title.Font = new Font("Segoe UI", 20, FontStyle.Bold);
+            title.Font = new Font("Segoe UI", 10, FontStyle.Bold);
             title.ForeColor = Ink;
             title.AutoSize = true;
             header.Controls.Add(title, 0, 0);
             Setup(settingsButton, "Настройки", 120);
             settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            settingsButton.FlatAppearance.BorderSize = 0;
+            settingsButton.FlatStyle = FlatStyle.System;
             settingsButton.ForeColor = Muted;
             header.Controls.Add(settingsButton, 1, 0);
             Panel hero = new Panel();
             hero.Dock = DockStyle.Fill;
             hero.Margin = new Padding(0);
-            connectButton.Size = new Size(194, 194);
+            connectButton.Size = new Size(180, 52);
             hero.Controls.Add(connectButton);
             hero.Layout += delegate
             {
@@ -106,7 +106,7 @@ namespace MihomoDesk
             section.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
             Label caption = new Label();
             caption.Text = "Подписки";
-            caption.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+            caption.Font = new Font("Segoe UI", 10, FontStyle.Bold);
             caption.ForeColor = Ink;
             caption.AutoSize = true;
             caption.Anchor = AnchorStyles.Left;
@@ -114,7 +114,7 @@ namespace MihomoDesk
             Setup(addSubscriptionButton, "+ Добавить", 125);
             addSubscriptionButton.Anchor = AnchorStyles.Right;
             addSubscriptionButton.ForeColor = Blue;
-            addSubscriptionButton.FlatAppearance.BorderSize = 0;
+            addSubscriptionButton.FlatStyle = FlatStyle.System;
             addSubscriptionButton.Click += delegate
             {
                 ShowAddDialog("");
@@ -132,9 +132,9 @@ namespace MihomoDesk
                     card.Width = Math.Max(300, cardsHost.ClientSize.Width - 22);
             };
             p.Controls.Add(cardsHost);
-            RoundedPanel trafficCard = new RoundedPanel();
+            Panel trafficCard = new Panel();
             trafficCard.Dock = DockStyle.Fill;
-            trafficCard.Padding = new Padding(14, 5, 14, 5);
+            trafficCard.Padding = new Padding(8, 4, 8, 4);
             TableLayoutPanel traffic = new TableLayoutPanel();
             traffic.Dock = DockStyle.Fill;
             traffic.ColumnCount = 2;
@@ -162,7 +162,7 @@ namespace MihomoDesk
             )
             {
                 label.Text = "—";
-                label.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+                label.Font = new Font("Segoe UI", 10, FontStyle.Bold);
                 label.ForeColor = Ink;
                 label.AutoSize = true;
             }
@@ -187,13 +187,17 @@ namespace MihomoDesk
             traffic.Controls.Add(upTotal, 1, 2);
             TableLayoutPanel footer = new TableLayoutPanel();
             footer.Dock = DockStyle.Fill;
+            footer.Margin = new Padding(0);
+            footer.RowCount = 1;
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             footer.ColumnCount = 2;
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Setup(exportButton, "Сохранить журнал", 175);
-            exportButton.Margin = new Padding(0, 7, 0, 0);
+            exportButton.Margin = new Padding(0);
+            exportButton.Anchor = AnchorStyles.Left;
             exportButton.Font = new Font("Segoe UI", 9);
-            exportButton.FlatAppearance.BorderColor = Color.FromArgb(222, 229, 241);
+            exportButton.FlatStyle = FlatStyle.System;
             footer.Controls.Add(exportButton, 0, 0);
             notice.Text = "Закрытие окна сворачивает VPN к часам.";
             notice.ForeColor = Muted;
@@ -448,7 +452,7 @@ namespace MihomoDesk
                 };
                 p.Controls.Add(licenses);
                 Label version = new Label();
-                version.Text = "VPN 0.10.1 · настройки сохраняются на этом компьютере";
+                version.Text = "VPN 0.10.2 · настройки сохраняются на этом компьютере";
                 version.Font = new Font("Segoe UI", 8);
                 version.AutoSize = true;
                 version.Margin = new Padding(0, 12, 0, 0);
@@ -486,7 +490,7 @@ namespace MihomoDesk
                     return;
                 try
                 {
-                    Diagnostics.ExportLog(d.FileName, "0.10.1");
+                    Diagnostics.ExportLog(d.FileName, "0.10.2");
                     MessageBox.Show("Журнал сохранён. Его можно отправить человеку, который помогает с настройкой.", "VPN");
                 }
                 catch (Exception e)
@@ -604,7 +608,7 @@ namespace MihomoDesk
             p.FlowDirection = FlowDirection.TopDown;
             p.WrapContents = false;
             Controls.Add(p);
-            status.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+            status.Font = new Font("Segoe UI", 10, FontStyle.Bold);
             status.AutoSize = true;
             p.Controls.Add(status);
             elapsed.AutoSize = true;

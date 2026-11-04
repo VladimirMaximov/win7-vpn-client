@@ -52,7 +52,7 @@ namespace MihomoDesk
             request.Headers["X-Device-OS"] = "Windows";
             request.Headers["X-Ver-OS"] = Environment.OSVersion.Version.ToString();
             request.Headers["X-Device-Model"] = "Windows PC";
-            request.Headers["X-App-Version"] = "0.10.1";
+            request.Headers["X-App-Version"] = "0.10.2";
             request.Headers["X-Device-Locale"] = "ru";
         }
     }

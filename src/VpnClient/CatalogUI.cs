@@ -308,10 +308,11 @@ namespace MihomoDesk
                 foreach (SubscriptionEntry entry in book.Entries)
                 {
                     string id = entry.Id;
-                    RoundedPanel card = new RoundedPanel();
-                    card.Selected = id == book.ActiveId;
-                    card.Height = 110;
-                    card.Padding = new Padding(12, 6, 12, 6);
+                    GroupBox card = new GroupBox();
+                    bool activeCard = id == book.ActiveId;
+                    card.Text = entry.Name + " (" + entry.Nodes.Count + ")";
+                    card.Height = 150;
+                    card.Padding = new Padding(8, 18, 8, 8);
                     card.Width = Math.Max(300, cardsHost.ClientSize.Width - 22);
                     card.Margin = new Padding(0, 0, 0, 6);
                     card.Tag = id;
@@ -319,18 +320,20 @@ namespace MihomoDesk
                     table.Dock = DockStyle.Fill;
                     table.ColumnCount = 1;
                     table.RowCount = 3;
-                    table.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-                    table.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+                    table.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+                    table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
                     table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                     card.Controls.Add(table);
-                    Button title = new Button();
-                    title.Text = (card.Selected ? "●  " : "○  ") + entry.Name + "    ·    " + entry.Nodes.Count;
+                    RadioButton title = new RadioButton();
+                    title.AutoCheck = false;
+                    title.Checked = activeCard;
+                    title.Text = "Использовать эту подписку";
                     title.TextAlign = ContentAlignment.MiddleLeft;
-                    title.FlatStyle = FlatStyle.Flat;
-                    title.FlatAppearance.BorderSize = 0;
-                    title.BackColor = Color.White;
-                    title.ForeColor = card.Selected ? Blue : Ink;
-                    title.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+                    title.FlatStyle = FlatStyle.System;
+
+                    title.BackColor = SystemColors.Control;
+                    title.ForeColor = SystemColors.ControlText;
+                    title.Font = new Font("Segoe UI", 9);
                     title.Dock = DockStyle.Fill;
                     title.Margin = new Padding(0);
                     title.Click += delegate
@@ -341,14 +344,24 @@ namespace MihomoDesk
                     catalogActions.Add(title);
                     ComboBox combo = new ComboBox();
                     combo.DropDownStyle = ComboBoxStyle.DropDownList;
-                    combo.DrawMode = DrawMode.Normal;
-                    combo.ItemHeight = 40;
+                    combo.DrawMode = DrawMode.OwnerDrawFixed;
+                    combo.ItemHeight = combo.Font.Height + 6;
+                    combo.DrawItem += delegate (object sender, DrawItemEventArgs e)
+                    {
+                        if (e.Index < 0) return;
+                        e.DrawBackground();
+                        ServerChoice choice = (ServerChoice)combo.Items[e.Index];
+                        TextRenderer.DrawText(e.Graphics, choice.Caption, combo.Font, e.Bounds, e.ForeColor,
+                            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                        e.DrawFocusRectangle();
+                    };
+                    combo.IntegralHeight = true;
                     combo.DropDownWidth = Math.Max(420, card.Width - 28);
                     combo.Dock = DockStyle.Top;
                     for (int i = 0; i < entry.Nodes.Count; i++)
                         combo.Items.Add(new ServerChoice { Index = i, Caption = ServerPresentation.Location(entry.Nodes[i]), Protocol = ServerPresentation.Protocol(entry.Nodes[i]) });
                     combo.SelectedIndex = Subscriptions.Selection(entry.Nodes, entry.Selected);
-                    if (card.Selected)
+                    if (activeCard)
                         servers = combo;
                     combo.SelectedIndexChanged += delegate
                     {
@@ -359,35 +372,10 @@ namespace MihomoDesk
                     serverRow.Dock = DockStyle.Fill;
                     serverRow.Margin = new Padding(0);
                     serverRow.Controls.Add(combo);
-                    Label location = new Label();
-                    location.Text = ((ServerChoice)combo.SelectedItem).Caption;
-                    location.BackColor = Color.White;
-                    location.ForeColor = Ink;
-                    location.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-                    location.AutoEllipsis = true;
-                    location.Location = new Point(6, 2);
-                    location.Height = 21;
-                    location.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-                    location.Cursor = Cursors.Hand;
-                    location.Click += delegate
-                    {
-                        if (combo.Enabled)
-                            combo.DroppedDown = true;
-                    };
-                    serverRow.Controls.Add(location);
-                    location.BringToFront();
-                    serverRow.Resize += delegate
-                    {
-                        location.Width = Math.Max(10, serverRow.ClientSize.Width - 32);
-                    };
-                    serverRow.Layout += delegate
-                    {
-                        location.Width = Math.Max(10, serverRow.ClientSize.Width - 32);
-                    };
                     Label protocol = new Label();
                     protocol.Text = ((ServerChoice)combo.SelectedItem).Protocol;
                     protocol.Dock = DockStyle.Bottom;
-                    protocol.Height = 17;
+                    protocol.Height = 20;
                     protocol.Font = new Font("Segoe UI", 8);
                     protocol.ForeColor = Muted;
                     protocol.AutoEllipsis = true;
@@ -459,9 +447,9 @@ namespace MihomoDesk
             b.Text = text;
             b.Size = new Size(width, 27);
             b.Font = new Font("Segoe UI", 8);
-            b.FlatStyle = FlatStyle.Flat;
+            b.FlatStyle = FlatStyle.System;
             b.FlatAppearance.BorderColor = Color.FromArgb(224, 229, 240);
-            b.BackColor = Color.White;
+            b.UseVisualStyleBackColor = true;
             b.Margin = new Padding(0, 0, 7, 0);
         }
 

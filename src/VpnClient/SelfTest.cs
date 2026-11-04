@@ -62,6 +62,19 @@ namespace MihomoDesk
                 PowerButton power = (PowerButton)typeof(MainForm).GetField("connectButton", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f);
                 if (Math.Abs(power.Left - (power.Parent.ClientSize.Width - power.Width) / 2) > 1)
                     throw new Exception("Initial connect button alignment failed");
+                FlowLayoutPanel subscriptions = (FlowLayoutPanel)typeof(MainForm).GetField("cardsHost", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f);
+                foreach (Control card in subscriptions.Controls)
+                {
+                    TableLayoutPanel rows = card.Controls[0] as TableLayoutPanel;
+                    if (rows == null) continue;
+                    Control heading = rows.Controls[0], server = rows.Controls[1], actions = rows.Controls[2];
+                    if (heading.Bottom > server.Top || server.Bottom > actions.Top || actions.Bottom > rows.ClientSize.Height)
+                        throw new Exception("Subscription controls overlap or are clipped");
+                }
+                Button export = (Button)typeof(MainForm).GetField("exportButton", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(f);
+                Rectangle exportBounds = f.RectangleToClient(export.RectangleToScreen(export.ClientRectangle));
+                if (!f.ClientRectangle.Contains(exportBounds) || export.Bottom > export.Parent.ClientSize.Height)
+                    throw new Exception("Export button is clipped");
                 Draw(f, "vpn-main.png");
                 Size originalSize = f.ClientSize;
                 f.ClientSize = new Size(960, originalSize.Height);
