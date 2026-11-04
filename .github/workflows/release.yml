@@ -1,0 +1,30 @@
+name: Build release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        default: v0.10.0
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check source privacy
+        run: python3 scripts/check-secrets.py
+      - name: Run tests
+        run: python3 scripts/test.py --dotnet "$(command -v dotnet)"
+      - name: Build Windows executable
+        run: python3 scripts/build.py --dotnet "$(command -v dotnet)"
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release upload "$RELEASE_TAG" dist/VPN.exe dist/VPN.sha256 --clobber
