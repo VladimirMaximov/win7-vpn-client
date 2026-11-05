@@ -220,6 +220,8 @@ namespace MihomoDesk
         };
         public static void Arm(Process core, int port, bool proxy)
         {
+            if (File.Exists(State))
+                throw new IOException("Previous proxy recovery is still pending");
             using (RegistryKey k = Registry.CurrentUser.OpenSubKey(Key, true))
             {
                 if (k == null)
