@@ -39,6 +39,7 @@
     <Compile Include="SimpleUI.cs" />
     <Compile Include="Subscription.cs" />
     <Compile Include="Telemetry.cs" />
+    <Compile Include="WindowsProxy.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\artifacts\bundle\mihomo.exe.gz"><LogicalName>assets.mihomo.exe.gz</LogicalName></EmbeddedResource>

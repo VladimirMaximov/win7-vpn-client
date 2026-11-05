@@ -452,7 +452,7 @@ namespace MihomoDesk
                 };
                 p.Controls.Add(licenses);
                 Label version = new Label();
-                version.Text = "VPN 0.10.2 · настройки сохраняются на этом компьютере";
+                version.Text = "VPN 0.10.3 · настройки сохраняются на этом компьютере";
                 version.Font = new Font("Segoe UI", 8);
                 version.AutoSize = true;
                 version.Margin = new Padding(0, 12, 0, 0);
@@ -490,7 +490,7 @@ namespace MihomoDesk
                     return;
                 try
                 {
-                    Diagnostics.ExportLog(d.FileName, "0.10.2");
+                    Diagnostics.ExportLog(d.FileName, "0.10.3");
                     MessageBox.Show("Журнал сохранён. Его можно отправить человеку, который помогает с настройкой.", "VPN");
                 }
                 catch (Exception e)

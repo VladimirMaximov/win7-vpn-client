@@ -70,7 +70,7 @@ namespace MihomoDesk
                 return;
             }
 
-            Diagnostics.Write("app.start", "version=0.10.2 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
+            Diagnostics.Write("app.start", "version=0.10.3 clr=" + Environment.Version + " os=" + Environment.OSVersion.Version + " mode=" + (args.Length == 0 ? "ui" : "maintenance"));
             if (args.Length == 1 && args[0] == "--recover")
             {
                 try
@@ -109,12 +109,14 @@ namespace MihomoDesk
                 {
                 }
 
-                try
+                for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    Recovery.Restore(owner);
-                }
-                catch
-                {
+                    try { Recovery.Restore(owner); return; }
+                    catch (Exception e)
+                    {
+                        Diagnostics.Failure("watchdog.restore", e);
+                        Thread.Sleep(1000);
+                    }
                 }
 
                 return;
@@ -216,14 +218,6 @@ namespace MihomoDesk
             "ProxyOverride",
             "AutoConfigURL"
         };
-        [DllImport("wininet.dll", SetLastError = true)]
-        static extern bool InternetSetOption(IntPtr h, int option, IntPtr b, int len);
-        static void Refresh()
-        {
-            InternetSetOption(IntPtr.Zero, 39, IntPtr.Zero, 0);
-            InternetSetOption(IntPtr.Zero, 37, IntPtr.Zero, 0);
-        }
-
         public static void Arm(Process core, int port, bool proxy)
         {
             using (RegistryKey k = Registry.CurrentUser.OpenSubKey(Key, true))
@@ -238,6 +232,7 @@ namespace MihomoDesk
                     d[f + "Kind"] = val == null ? 0 : (int)k.GetValueKind(f);
                 }
 
+                d["wininet"] = WindowsProxy.Capture();
                 Program.SaveSecret(State, Profiles.Json(d));
                 Diagnostics.Write("proxy.snapshot", "saved=true");
             }
@@ -248,20 +243,24 @@ namespace MihomoDesk
             s.CreateNoWindow = true;
             Process.Start(s).Dispose();
             if (proxy)
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(Key, true))
-                {
-                    k.SetValue("ProxyServer", "127.0.0.1:" + port, RegistryValueKind.String);
-                    k.SetValue("ProxyOverride", "<local>", RegistryValueKind.String);
-                    k.DeleteValue("AutoConfigURL", false);
-                    k.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
-                    Refresh();
-                    Diagnostics.Write("proxy.enabled", "port=" + port);
-                }
+            {
+                Dictionary<string, object> enabled = Profiles.Map("flags", 3, "server", "127.0.0.1:" + port, "bypass", "<local>", "pac", "");
+                WindowsProxy.Apply(enabled);
+                if (!WindowsProxy.Equivalent(enabled, WindowsProxy.Capture()))
+                    throw new IOException("Windows proxy activation verification failed");
+                Diagnostics.Write("proxy.enabled", "port=" + port + " verified=True");
+            }
         }
 
         public static void Restore()
         {
             Restore(null);
+        }
+
+        public static void RestoreForPort(int port)
+        {
+            if (File.Exists(State)) Restore(null);
+            else Diagnostics.Write("proxy.restore.missing-snapshot", "disabledOwnedProxy=" + WindowsProxy.DisableOwned(port));
         }
 
         public static void Restore(string owner)
@@ -289,26 +288,27 @@ namespace MihomoDesk
                     if (Profiles.Get(d, "proxy", "False").Equals("True", StringComparison.OrdinalIgnoreCase))
                         using (RegistryKey k = Registry.CurrentUser.OpenSubKey(Key, true))
                         {
-                            string owned = "127.0.0.1:" + Profiles.Get(d, "port", "");
                             // Do not replace settings changed by another app while we were running.
-                            if (Convert.ToString(k.GetValue("ProxyServer", "")) == owned)
+                            Dictionary<string, object> current = WindowsProxy.Capture();
+                            string port = Profiles.Get(d, "port", "");
+                            if (WindowsProxy.UsesPort(Convert.ToString(k.GetValue("ProxyServer", "")), port) || WindowsProxy.UsesPort(Profiles.Get(current, "server", ""), port))
                             {
-                                foreach (string f in Fields)
+                                object native;
+                                Dictionary<string, object> previous = d.TryGetValue("wininet", out native) ? native as Dictionary<string, object> : null;
+                                if (previous == null)
                                 {
-                                    object v = d[f];
-                                    if (v == null)
-                                        k.DeleteValue(f, false);
-                                    else
-                                    {
-                                        RegistryValueKind kind = (RegistryValueKind)Int32.Parse(Profiles.Get(d, f + "Kind", "1"));
-                                        if (kind == RegistryValueKind.DWord)
-                                            v = Int32.Parse(Convert.ToString(v));
-                                        k.SetValue(f, v, kind);
-                                    }
+                                    int flags = Convert.ToInt32(d["ProxyEnable"] ?? 0) != 0 ? 3 : 1;
+                                    if (!String.IsNullOrEmpty(Convert.ToString(d["AutoConfigURL"]))) flags |= 4;
+                                    // Legacy snapshots did not record automatic discovery; retain its current setting.
+                                    flags |= Int32.Parse(Profiles.Get(current, "flags", "1")) & 8;
+                                    previous = Profiles.Map("flags", flags, "server", Convert.ToString(d["ProxyServer"]), "bypass", Convert.ToString(d["ProxyOverride"]), "pac", Convert.ToString(d["AutoConfigURL"]));
                                 }
-
-                                Refresh();
+                                WindowsProxy.Apply(previous);
+                                if (!WindowsProxy.Equivalent(previous, WindowsProxy.Capture()))
+                                    throw new IOException("Windows proxy restoration verification failed");
+                                Diagnostics.Write("proxy.restore.verified", "success=True");
                             }
+                            else Diagnostics.Write("proxy.restore.skipped", "reason=changed-by-another-application");
                         }
 
                     try
@@ -440,7 +440,11 @@ namespace MihomoDesk
                 ProbeRunner.CancelAll();
                 try
                 {
-                    Disconnect();
+                    if (!Disconnect())
+                    {
+                        e.Cancel = true;
+                        closing = false;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -458,8 +462,7 @@ namespace MihomoDesk
                 if (core != null && !busy && core.HasExited)
                 {
                     Diagnostics.Write("core.exit", "exit=" + core.ExitCode);
-                    Disconnect();
-                    SetStatus("Соединение завершено", Color.Firebrick);
+                    if (Disconnect()) SetStatus("Соединение завершено", Color.Firebrick);
                 }
             };
             timer.Start();
@@ -707,8 +710,17 @@ namespace MihomoDesk
             worker.RunWorkerAsync();
         }
 
-        void Disconnect()
+        bool Disconnect()
         {
+            Diagnostics.Write("disconnect.begin", "");
+            try { Recovery.RestoreForPort(localPort); }
+            catch (Exception e)
+            {
+                Diagnostics.Failure("proxy.restore", e);
+                SetStatus("Не удалось восстановить прокси", Color.Firebrick);
+                Error("Windows не восстановила настройки прокси. Повторите отключение и сохраните журнал.");
+                return false;
+            }
             sessionClock.Reset();
             connectButton.Elapsed = "00:00:00";
             connectedEntryId = "";
@@ -717,8 +729,6 @@ namespace MihomoDesk
             downText = upText = "—";
             downRate.Text = upRate.Text = "—";
             downTotal.Text = upTotal.Text = "За сеанс: —";
-            Diagnostics.Write("disconnect.begin", "");
-            Recovery.Restore();
             if (core != null)
             {
                 try
@@ -736,8 +746,9 @@ namespace MihomoDesk
 
             SetStatus("Не подключено", Muted);
             state.ForeColor = Color.FromArgb(90, 100, 115);
-            Say("Отключено. Прежние настройки прокси восстановлены, если их не меняла другая программа.");
+            Say("Отключено. Настройки прокси Windows восстановлены, если их не меняла другая программа.");
             UpdateButtons();
+            return true;
         }
     }
 

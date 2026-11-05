@@ -9,7 +9,24 @@ on:
 permissions:
   contents: write
 jobs:
+  proxy-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Recover pinned managed test dependency
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.9.0 --pattern VPN.exe --dir artifacts/previous
+          python scripts/recover-release-deps.py artifacts/previous/VPN.exe
+      - name: Verify Windows proxy enable, disable and restore
+        run: dotnet run --project tests/Proxy.Tests/Proxy.Tests.csproj -- --windows
   build:
+    needs: proxy-windows
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

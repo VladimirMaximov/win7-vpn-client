@@ -106,6 +106,8 @@ namespace MihomoDesk
             while (e != null && depth++ < 6)
             {
                 string fields = "stage=" + stage + " exception=" + e.GetType().Name;
+                System.ComponentModel.Win32Exception native = e as System.ComponentModel.Win32Exception;
+                if (native != null) fields += " nativeError=" + native.NativeErrorCode;
                 WebException w = e as WebException;
                 if (w != null)
                 {

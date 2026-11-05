@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/VpnClient/WindowsProxy.cs" Link="WindowsProxy.cs" />
+    <Compile Include="../../src/VpnClient/Core.cs" Link="Core.cs" />
+    <Compile Include="ProxyTests.cs" />
+    <Reference Include="YamlDotNet"><HintPath>../../.deps/YamlDotNet.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
